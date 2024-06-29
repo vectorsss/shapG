@@ -2,13 +2,16 @@ from setuptools import setup, find_packages
 
 setup(
     name="shapG",
-    version="0.01",
+    version="0.12.0",
     packages=find_packages(),
     install_requires=[
         "networkx",
         "matplotlib",
         "numpy",
         "tqdm",
+        "pandas",
+        "scipy",
+        "numpy",
     ],
     extras_require={
         "dev": [

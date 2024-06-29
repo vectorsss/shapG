@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot(shapley_values, top_n=10):
+def plot(shapley_values, top_n=10, file_name=None):
     """plot the shapley values
 
     Args:
@@ -34,7 +34,8 @@ def plot(shapley_values, top_n=10):
     # add the label
     for i, v in enumerate(values):
         ax.text(v + 0.01, i, f'{v:.2f}', va='center')
-    
+    if file_name is not None:
+        plt.savefig(file_name, format='eps', dpi=300)
     plt.show()
     
 if __name__ == '__main__':

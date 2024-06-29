@@ -89,7 +89,7 @@ def get_neighbors_at_depth(G, node, depth):
     neighbors = {n for n, d in path_lengths.items() if d == depth}
     return neighbors
 
-def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=True, scale=True):
+def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=True, scale=True, verbose=False):
     """shapG algorithm with local search
 
     Args:
@@ -128,7 +128,7 @@ def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=T
                 iteration = 0
                 for S_size in range(len(neighbors_at_depth_sampled) + 1):
                     for S in itertools.combinations(neighbors_at_depth_sampled, S_size):
-                        if iteration % 100000 == 0:
+                        if verbose and iteration % 100000 == 0:
                             print("{}: {}/{}".format(node, iteration, 1 << len(neighbors_at_depth_sampled)))
                         if node not in S:
                             S_with_node = list(S) + [node]
