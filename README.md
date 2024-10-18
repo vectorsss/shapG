@@ -4,8 +4,8 @@ If you find this code useful in your research, please consider citing:
 
 1. For centralities measures:
       ```
-      @article{zhao2024investigationcentralitymeasuresopinion,
-            title={Investigation on centrality measures and opinion dynamics in two-layer networks with replica nodes}, 
+      @article{zhao2024centralitymeasuresopiniondynamics,
+            title={Centrality measures and opinion dynamics in two-layer networks with replica nodes}, 
             author={Chi Zhao and Elena Parilina},
             year={2024},
             eprint={2406.18780},

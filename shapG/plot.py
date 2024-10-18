@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot(shapley_values, top_n=10, file_name=None):
+def plot(shapley_values, top_n=10, style='seaborn-v0_8' ,file_name=None):
     """plot the shapley values
 
     Args:
@@ -18,7 +18,7 @@ def plot(shapley_values, top_n=10, file_name=None):
     nodes, values = zip(*sorted_values)
     
     # set gnuplot style
-    plt.style.use('seaborn')
+    plt.style.use(style)
     
     # plot the bar chart
     fig, ax = plt.subplots()
