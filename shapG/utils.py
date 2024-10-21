@@ -3,8 +3,8 @@ import numpy as np
 import networkx as nx
 from scipy.stats import pearsonr,kendalltau,spearmanr
 from sklearn.metrics import mutual_info_score
+from sklearn.feature_selection import mutual_info_regression
 
-import logging
 def corr_generator(df, method=kendalltau):
     """generate the correlation matrix of a dataframe
 
@@ -39,6 +39,17 @@ def matrix_generator(df, method=kendalltau):
     """
     if method in [pearsonr, kendalltau, spearmanr]:
         return corr_generator(df, method)
+    elif method == mutual_info_score:
+        # check whether the columns are categorical
+        if df.apply(lambda x: len(x.unique())).max() > 10:
+            raise ValueError("The columns should be categorical")
+    elif method == mutual_info_regression:
+        matrix_df = pd.DataFrame(np.zeros((df.shape[1], df.shape[1])), columns=df.columns, index=df.columns)
+        for col1 in matrix_df.columns:
+            for col2 in matrix_df.columns:
+                if col1 != col2:
+                    measures = method(df[col1].values.reshape(-1, 1), df[col2])
+                    matrix_df.loc[col1, col2] = measures
     else:
         # Initialize dataframes for storing correlation values
         matrix_df = pd.DataFrame(np.zeros((df.shape[1], df.shape[1])), columns=df.columns, index=df.columns)
@@ -60,6 +71,21 @@ def kl(P,Q):
     Q = Q / np.sum(Q)
     divergence = np.sum(P*np.log(P/Q))
     return divergence
+
+def kl_mi_matrix(X, y):
+    W = matrix_generator(X, kl)
+    mi = mutual_info_regression(X, y)
+    # normalize W and mi
+    W = W/np.sum(np.array(W))
+    mi = mi/np.sum(mi)
+    W2 = W.copy()
+    # merge mi and W
+    for i in range(len(mi)):
+        W2.iloc[i, :] += mi[i]/(len(mi)-1)
+        W2.iloc[:, i] += mi[i]/(len(mi)-1)
+        W2.iloc[i, i] = 0
+    return W2
+
 
 def create_minimal_edge_graph(W, version='v3', reverse=True, verbose=False):
     """weight matrix to reduced adjacency matrix
