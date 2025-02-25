@@ -47,31 +47,35 @@ def coalition_degree(G, S):
     subgraph = G.subgraph(S)
     return sum(dict(subgraph.degree(weight='weight')).values()) / 2
 
-def shapley_value(G: nx.Graph,f=coalition_degree):
+def shapley_value(G: nx.Graph,f=coalition_degree, verbose=False):
     """shapley value without sampling
 
     Args:
         G (nx.Graph): graph
         f (function, optional): the characteristic function based on graph. Defaults to coalition_degree.
+        verbose (bool, optional): whether to show the progress bar. Defaults to False.
 
     Returns:
         dict: dictionary of shapley value
     """
-    n_nodes = len(G.nodes())
-    shapley_values = {node: 0 for node in G.nodes()}
+    nodes = list(G.nodes())
+    n_nodes = len(nodes)
+    shapley_values = {node: 0 for node in nodes}
     
     # Precompute factorials to improve efficiency
     fact = [factorial(i) for i in range(n_nodes + 1)]
-    
-    for node in tqdm(G.nodes()):
-        for r in range(n_nodes + 1):
-            for subset in itertools.combinations(G.nodes(), r):
-                if node not in subset:
-                    S = list(subset)
-                    S_with_node = S + [node]
-                    coeff = (fact[len(S)] * fact[n_nodes - len(S) - 1]) / fact[n_nodes]
-                    marginal_contribution = f(G, S_with_node) - f(G, S)
-                    shapley_values[node] += coeff * marginal_contribution
+    # Use tqdm to show a progress bar if verbose is True
+    node_iterator = tqdm(nodes) if verbose else nodes
+
+    for node in node_iterator:
+        other_nodes = [n for n in nodes if n != node]
+        for r in range(n_nodes):
+            for subset in itertools.combinations(other_nodes, r):
+                S = list(subset)
+                S_with_node = S + [node]
+                coeff = (fact[len(S)] * fact[n_nodes - len(S) - 1]) / fact[n_nodes]
+                marginal_contribution = f(G, S_with_node) - f(G, S)
+                shapley_values[node] += coeff * marginal_contribution
     return shapley_values
 
 def get_neighbors_at_depth(G, node, depth):
@@ -104,7 +108,8 @@ def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=T
         dict: dictionary of shapley value
     """
     shapley_values = {node: 0 for node in G.nodes()}
-    for node in tqdm(G.nodes()):
+    node_iterator = tqdm(G.nodes(), desc="Computing Shapley values") if verbose else G.nodes()
+    for node in node_iterator:
         neighbors_at_depth = set()
         for d in range(1, depth + 1):
             neighbors_at_depth |= get_neighbors_at_depth(G, node, d)
@@ -142,7 +147,7 @@ def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=T
     if approximate_by_ratio:
         biggest_coalition_contribution = f(G, G.nodes())
         approximate_biggest_coalition_contribution = sum(shapley_values.values())
-        for k,v in shapley_values.items():
-            corrected_v = v / approximate_biggest_coalition_contribution * biggest_coalition_contribution
-            shapley_values[k] = corrected_v
+        if approximate_biggest_coalition_contribution != 0:  # Avoid division by zero
+            correction_factor = biggest_coalition_contribution / approximate_biggest_coalition_contribution
+            shapley_values = {k: v * correction_factor for k, v in shapley_values.items()}
     return shapley_values

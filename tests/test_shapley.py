@@ -1,6 +1,9 @@
 import unittest
 import time
 import networkx as nx
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from shapG.shapley import shapG, shapley_value, graph_generator
 
 class TestShapleyValue(unittest.TestCase):

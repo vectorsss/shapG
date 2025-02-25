@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="shapG",
-    version="0.13.1",
+    version="0.13.2",
     packages=find_packages(),
     install_requires=[
         "networkx",
