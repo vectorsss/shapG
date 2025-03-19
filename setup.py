@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="shapG",
-    version="0.13.2",
+    version="0.13.2-dev",
     packages=find_packages(),
     install_requires=[
         "networkx",
@@ -12,6 +12,7 @@ setup(
         "pandas",
         "scipy",
         "numpy",
+        "tabulate"
     ],
     extras_require={
         "dev": [
