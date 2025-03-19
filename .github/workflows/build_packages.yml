@@ -39,9 +39,9 @@ jobs:
         python -m build
         twine check dist/*
     
-    - name: Run tests
+    - name: Test with pytest
       run: |
-        python -m pytest
+        pytest
     
     - name: Archive build artifacts
       uses: actions/upload-artifact@v4
