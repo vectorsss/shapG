@@ -17,14 +17,15 @@ If you find this code useful in your research, please consider citing:
       ```
 2. For the new method for explanable ai:
       ```
-      @article{zhao2024shapgnewfeatureimportance,
-            title={ShapG: new feature importance method based on the Shapley value}, 
-            author={Chi Zhao and Jing Liu and Elena Parilina},
-            year={2024},
-            eprint={2407.00506},
-            archivePrefix={arXiv},
-            primaryClass={cs.AI},
-            journal={arXiv preprint arXiv:2407.00506},
-            url={https://arxiv.org/abs/2407.00506}, 
+      @article{ZHAO2025110409,
+            title = {ShapG: New feature importance method based on the Shapley value},
+            journal = {Engineering Applications of Artificial Intelligence},
+            volume = {148},
+            pages = {110409},
+            year = {2025},
+            issn = {0952-1976},
+            doi = {https://doi.org/10.1016/j.engappai.2025.110409},
+            url = {https://www.sciencedirect.com/science/article/pii/S0952197625004099},
+            author = {Chi Zhao and Jing Liu and Elena Parilina},
       }
       ```
