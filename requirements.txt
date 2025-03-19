@@ -1,5 +1,5 @@
 networkx
-numpy>=1.26.4,<2.0.0
+numpy<2.0.0
 tqdm
 pandas
 scipy
