@@ -114,6 +114,31 @@ def get_reachable_nodes_at_depth(G, node, depth):
     path_lengths = nx.single_source_shortest_path_length(G, node, cutoff=depth)
     return {n for n, d in path_lengths.items() if d == depth}
 
+def cis(G, f=coalition_degree):
+    """Calculate CIS-values for all nodes in a graph.
+
+    Args:
+        G (nx.Graph): The graph.
+        f (function, optional): Characteristic function. Defaults to coalition_degree.
+
+    Returns:
+        dict: Dictionary of CIS-values for each node.
+    """
+    nodes = list(G.nodes())
+    n_nodes = len(nodes)
+    grand_coalition_value = f(G, set(nodes))
+    individual_values = {node: f(G, {node}) for node in nodes}
+    total_individual_value = sum(individual_values.values())
+
+    surplus = grand_coalition_value - total_individual_value
+    equal_share = surplus / n_nodes if n_nodes > 0 else 0
+
+    cis_values = {
+        node: individual_values[node] + equal_share
+        for node in nodes
+    }
+    return cis_values
+
 def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=True, scale=True, verbose=False):
     """Approximate Shapley values using local neighborhood sampling (ShapG algorithm).
 

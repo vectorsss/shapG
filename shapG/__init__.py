@@ -43,6 +43,7 @@ __version__ = '0.1.0'
 __all__ = [
     'shapley_value',
     'shapG',
+    'cis',
     'coalition_degree',
     'graph_generator',
     'plot',
