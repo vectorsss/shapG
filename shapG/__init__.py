@@ -29,7 +29,7 @@ plot(shapley_values, top_n=10)
 ```
 """
 
-from .shapley import shapley_value, shapG, coalition_degree, graph_generator
+from .shapley import shapley_value, shapG, coalition_degree, graph_generator, cis
 from .plot import plot
 from .utils import (
     corr_generator, 
@@ -39,7 +39,7 @@ from .utils import (
     create_minimal_edge_graph
 )
 
-__version__ = '0.1.0'
+__version__ = '0.13.3'
 __all__ = [
     'shapley_value',
     'shapG',
