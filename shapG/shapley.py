@@ -68,36 +68,64 @@ def shapley_value(G: nx.Graph, f=coalition_degree, verbose=False):
     Returns:
         dict: Dictionary of Shapley values for each node.
     """
-    nodes = list(G.nodes())
+    # Ensure nodes are sorted for consistent ordering
+    nodes = sorted(list(G.nodes()))
     n_nodes = len(nodes)
     shapley_values = {node: 0 for node in nodes}
     
-    # Precompute factorials to improve efficiency
+    # Precompute factorials and coefficients to improve efficiency
     fact = [factorial(i) for i in range(n_nodes + 1)]
     
-    # Use tqdm for progress tracking if verbose
-    node_iterator = tqdm(nodes, desc="Computing Shapley values") if verbose else nodes
-
+    coefficients = [
+        (fact[s] * fact[n_nodes - s - 1]) / fact[n_nodes]
+        for s in range(n_nodes)
+    ]
+    
     # Cache for function evaluations to avoid redundant calculations
     @lru_cache(maxsize=2**15)
     def cached_f(coalition_tuple):
         return f(G, set(coalition_tuple))
-
-    for node in node_iterator:
-        other_nodes = tuple(n for n in nodes if n != node)
-        
-        for r in range(n_nodes):
-            for subset in itertools.combinations(other_nodes, r):
-                # Calculate coefficient for this coalition size
-                coeff = (fact[len(subset)] * fact[n_nodes - len(subset) - 1]) / fact[n_nodes]
+    
+    # Process coalitions size by size to avoid storing all of them at once
+    if verbose:
+        # Set up a progress bar for all coalitions
+        total_combinations = 2**n_nodes
+        pbar = tqdm(total=total_combinations, desc="Processing coalitions")
+    
+    # Prepare nodes set for faster lookups
+    nodes_set = set(nodes)
+    
+    # Process each coalition size separately to save memory
+    for r in range(n_nodes + 1):
+        # Generate combinations on-the-fly
+        for coalition in itertools.combinations(nodes, r):
+            if verbose:
+                pbar.update(1)
+                
+            coalition_value = cached_f(coalition)
+            
+            # Get coefficient for this coalition size
+            coeff = coefficients[r - 1] if r > 0 and r <= n_nodes else 0
+            
+            # Use set difference for nodes not in coalition
+            coalition_set = set(coalition)
+            remaining_nodes = nodes_set - coalition_set
+            
+            # For each node not in the coalition, compute its marginal contribution
+            for node in remaining_nodes:
+                new_coalition = tuple(sorted(coalition_set.union({node})))
+                
+                new_coalition_value = cached_f(new_coalition)
                 
                 # Calculate marginal contribution
-                marginal_contribution = (
-                    cached_f(subset + (node,)) - 
-                    cached_f(subset)
-                )
+                marginal_contribution = new_coalition_value - coalition_value
                 
+                # Update Shapley value
                 shapley_values[node] += coeff * marginal_contribution
+    
+    if verbose:
+        pbar.close()
+    
     return shapley_values
 
 def get_reachable_nodes_at_depth(G, node, depth):
@@ -157,6 +185,9 @@ def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=T
     """
     shapley_values = {node: 0 for node in G.nodes()}
     
+    # Precompute full coalition value if we'll need it for scaling
+    full_coalition_value = f(G, set(G.nodes())) if approximate_by_ratio else None
+    
     # Use tqdm for progress tracking if verbose
     node_iterator = tqdm(G.nodes(), desc="Computing Shapley approximations") if verbose else G.nodes()
     
@@ -176,10 +207,11 @@ def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=T
             # Small enough neighborhood - process all subsets
             reachable_nodes_at_depth.add(node)  # Add the node itself
             
+            coeff = 1 / 2 ** (len(reachable_nodes_at_depth) - 1)            
             for S_size in range(len(reachable_nodes_at_depth)):
                 for S in itertools.combinations(reachable_nodes_at_depth - {node}, S_size):
-                    S_tuple = tuple(S)
-                    S_with_node_tuple = S_tuple + (node,)
+                    S_tuple = tuple(sorted(S))  # Sort for better cache performance
+                    S_with_node_tuple = tuple(sorted(S + (node,)))
                     
                     marginal_contribution = (
                         cached_f(S_with_node_tuple) - 
@@ -188,23 +220,31 @@ def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=T
                     shapley_values[node] += marginal_contribution
             
             # Apply scaling factor
-            coeff = 1 / 2 ** (len(reachable_nodes_at_depth) - 1)
             shapley_values[node] *= coeff
         else:
             # Large neighborhood - use sampling
             # Determine number of samples based on neighborhood size
             # Eine Wahrscheinlichkeitsaufgabe in der Kundenwerbung Equation 18
+            # sample_nums = ceil(((len(reachable_nodes_at_depth) + 1/2) / m - 1/2) * (log2(len(reachable_nodes_at_depth)) + 0.5772156649) + 1/2) # original formula
             sample_nums = ceil(len(reachable_nodes_at_depth) / m * (log2(len(reachable_nodes_at_depth)) + 0.5772156649))
+            
+            # Precompute coefficient outside of loops
+            coeff = 1 / 2 ** (m) / sample_nums
+            if scale:
+                # Scale proportionally to the ratio of full neighborhood size to sample size
+                coeff *= ((len(reachable_nodes_at_depth) + 1) / (m + 1))
+            
+            reachable_nodes_list = list(reachable_nodes_at_depth)  # Convert to list for sampling
             
             for _ in range(sample_nums):
                 # Sample a subset of reachable_nodes
-                reachable_nodes_sampled = set(random.sample(list(reachable_nodes_at_depth), m))
+                reachable_nodes_sampled = set(random.sample(reachable_nodes_list, min(m, len(reachable_nodes_list))))
                 reachable_nodes_sampled.add(node)  # Add the node itself
                 
                 for S_size in range(len(reachable_nodes_sampled)):
                     for S in itertools.combinations(reachable_nodes_sampled - {node}, S_size):
-                        S_tuple = tuple(S)
-                        S_with_node_tuple = S_tuple + (node,)
+                        S_tuple = tuple(sorted(S))  # Sort for better cache performance
+                        S_with_node_tuple = tuple(sorted(S + (node,)))
                         
                         marginal_contribution = (
                             cached_f(S_with_node_tuple) - 
@@ -213,15 +253,13 @@ def shapG(G: nx.Graph, f=coalition_degree, depth=1, m=15, approximate_by_ratio=T
                         shapley_values[node] += marginal_contribution
             
             # Apply scaling factors
-            coeff = 1 / 2 ** (m) / sample_nums
-            if scale:
-                # Scale proportionally to the ratio of full neighborhood size to sample size
-                coeff *= ((len(reachable_nodes_at_depth) + 1) / (m + 1))
             shapley_values[node] *= coeff
     
     # Optional: scale all values to match the full coalition value
     if approximate_by_ratio:
-        full_coalition_value = f(G, set(G.nodes()))
+        if full_coalition_value is None:  # If we didn't precompute it
+            full_coalition_value = f(G, set(G.nodes()))
+            
         approximate_sum = sum(shapley_values.values())
         
         if approximate_sum != 0:  # Avoid division by zero

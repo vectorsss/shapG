@@ -141,8 +141,8 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, 
     plt.grid()
     
     if filename:
-        plt.savefig(filename, format='eps', dpi=300)
-    plt.show()
+        plt.savefig(filename, dpi=300)
+    # plt.show()
     
     return results
 
@@ -222,6 +222,6 @@ def classification_kpi(X, y, S):
 if __name__ == "__main__":
     # Example usage
     model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
-    shapley_values, cis_values, results = benchmark_feature_importance(housing_data_reader, model)
+    shapley_values, cis_values, results = benchmark_feature_importance(housing_data_reader, model, filename='housing_benchmark.png')
     print("Shapley values:", shapley_values)
     print("CIS values:", cis_values)
