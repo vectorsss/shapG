@@ -6,7 +6,8 @@ import os
 import numpy as np
 from tabulate import tabulate
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from shapG.shapley import shapG, shapley_value, graph_generator
+from shapG.core.shapley import shapley_value, graph_generator
+from shapG import shapG
 
 class TestShapleyValue(unittest.TestCase):
     """Test case for ShapG module functionality."""
@@ -42,7 +43,7 @@ class TestShapleyValue(unittest.TestCase):
         self.assertEqual(len(TestShapleyValue.shapley_values), TestShapleyValue.G.number_of_nodes())
         
         # Verify efficiency property (sum of values equals characteristic function of entire graph)
-        from shapG.shapley import coalition_degree
+        from shapG.core.shapley import coalition_degree
         total_value = sum(TestShapleyValue.shapley_values.values())
         full_coalition_value = coalition_degree(TestShapleyValue.G, set(TestShapleyValue.G.nodes()))
         self.assertAlmostEqual(total_value, full_coalition_value, places=6)
@@ -54,6 +55,7 @@ class TestShapleyValue(unittest.TestCase):
         TestShapleyValue.shapley_values_G = shapG(
             TestShapleyValue.G, 
             depth=1,
+            scale=True,
             approximate_by_ratio=True,
             verbose=True
         )

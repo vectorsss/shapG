@@ -1,6 +1,7 @@
 import os
 import sys
 import pickle
+import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,11 +11,198 @@ from scipy.stats import kendalltau, pearsonr
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, accuracy_score
 import lightgbm as lgb
+import warnings
+from typing import Callable, Optional, Tuple
+from scipy.optimize import minimize
+from scipy.linalg import qr
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname('.'), '..')))
 
 from shapG import shapG, cis
 from shapG.visualization import plot as shapGplot
 from shapG import corr_generator, create_minimal_edge_graph, matrix_generator, kl, kl_mi_matrix
+
+# ==============================================================================
+# QR-CS Shapley Implementation (NEW)
+# ==============================================================================
+
+class QRCompressedSensingShapley:
+    """
+    QR-CS Shapley value approximation based on:
+    "A novel sparsity-based deterministic method for Shapley value approximation"
+    """
+    
+    def __init__(self, n_features: int, n_measurements: Optional[int] = None, 
+                 tolerance: float = 5e-5):
+        self.n = n_features
+        self.m = min(2**(n_features - 1), 5000)  # Cap for memory
+        
+        if n_measurements is None:
+            self.l = min(int(2 * n_features * np.log(max(n_features, 2))), self.m // 2, 500)
+        else:
+            self.l = min(n_measurements, self.m)
+            
+        self.tolerance = tolerance
+        
+        # Pre-compute components
+        self.weights = self._compute_shapley_weights()
+        self.Psi = self._get_dct_basis()
+        self.B, self.selected_coalitions = self._compute_measurement_matrix()
+        
+    def _compute_shapley_weights(self) -> np.ndarray:
+        """Compute Shapley weights"""
+        weights = []
+        for s in range(min(self.n, 20)):
+            weight = math.factorial(s) * math.factorial(self.n - s - 1) / math.factorial(self.n)
+            n_coalitions = self._comb(self.n - 1, s)
+            weights.extend([weight] * min(n_coalitions, self.m - len(weights)))
+            if len(weights) >= self.m:
+                break
+        return np.array(weights[:self.m])
+    
+    def _comb(self, n: int, k: int) -> int:
+        """Binomial coefficient"""
+        if k > n or k < 0:
+            return 0
+        if k == 0 or k == n:
+            return 1
+        k = min(k, n - k)
+        c = 1
+        for i in range(k):
+            c = c * (n - i) // (i + 1)
+        return c
+    
+    def _get_dct_basis(self) -> np.ndarray:
+        """DCT-II basis"""
+        if self.m > 1000:
+            return np.eye(self.m)
+            
+        Psi = np.zeros((self.m, self.m))
+        for k in range(self.m):
+            for n in range(self.m):
+                if k == 0:
+                    Psi[n, k] = np.sqrt(1/self.m)
+                else:
+                    Psi[n, k] = np.sqrt(2/self.m) * np.cos(np.pi * k * (n + 0.5) / self.m)
+        return Psi
+    
+    def _compute_measurement_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
+        """QR decomposition for measurement matrix"""
+        V = self.Psi.T
+        Q, R, P = qr(V, pivoting=True, mode='economic' if self.m > 1000 else 'full')
+        
+        selected_indices = P[:self.l]
+        
+        B = np.zeros((self.l, self.m))
+        for i, idx in enumerate(selected_indices):
+            B[i, idx] = 1
+            
+        return B, selected_indices
+    
+    def _index_to_coalition(self, idx: int, player: int) -> set:
+        """Convert index to coalition"""
+        coalition = set()
+        available_players = [i for i in range(self.n) if i != player]
+        
+        if idx >= 2**(self.n - 1):
+            idx = idx % 2**(self.n - 1)
+        
+        for i, p in enumerate(available_players):
+            if idx & (1 << i):
+                coalition.add(p)
+        
+        return coalition
+    
+    def compute_shapley(self, utility_func: Callable) -> dict:
+        """Compute Shapley values"""
+        shapley_values = {}
+        
+        for player in range(self.n):
+            # Measure marginal contributions
+            y = np.zeros(self.l)
+            
+            for i, coal_idx in enumerate(self.selected_coalitions):
+                coalition = self._index_to_coalition(coal_idx, player)
+                
+                v_with = utility_func(coalition | {player})
+                v_without = utility_func(coalition) if coalition else 0
+                y[i] = v_with - v_without
+            
+            # Compressed sensing reconstruction
+            try:
+                Q, _, _ = qr(self.Psi, mode='economic' if self.m > 1000 else 'full')
+                Theta = self.B @ self.Psi @ Q
+                
+                # L1 minimization
+                s_hat = self._l1_minimization(Theta, y)
+                u_hat = self.Psi @ Q @ s_hat
+                
+                shapley_values[player] = np.dot(self.weights[:len(u_hat)], u_hat)
+            except:
+                shapley_values[player] = np.mean(y)
+        
+        return shapley_values
+    
+    def _l1_minimization(self, A: np.ndarray, b: np.ndarray) -> np.ndarray:
+        """L1 minimization"""
+        m, n = A.shape
+        
+        try:
+            x0 = np.linalg.lstsq(A, b, rcond=None)[0]
+        except:
+            x0 = np.zeros(n)
+        
+        def objective(x):
+            return np.sum(np.abs(x))
+        
+        def constraint(x):
+            return self.tolerance - np.linalg.norm(A @ x - b)
+        
+        constraints = {'type': 'ineq', 'fun': constraint}
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = minimize(
+                objective, x0, method='SLSQP',
+                constraints=constraints,
+                options={'maxiter': 200, 'ftol': 1e-6}
+            )
+        
+        return result.x if result.success else x0
+
+
+def qrcs_shapley(G, f, n_measurements=None):
+    """
+    Compute QR-CS Shapley values for a graph
+    
+    Parameters:
+    - G: NetworkX graph
+    - f: utility function that takes (G, S) where S is a set of nodes
+    - n_measurements: number of measurements (optional)
+    
+    Returns:
+    - Dictionary with node: shapley_value pairs
+    """
+    n_nodes = G.number_of_nodes()
+    nodes = list(G.nodes())
+    
+    # Create utility wrapper that works with node indices
+    def utility_wrapper(S):
+        node_set = {nodes[i] for i in S}
+        return f(G, node_set)
+    
+    # Compute QR-CS Shapley values
+    qrcs = QRCompressedSensingShapley(n_nodes, n_measurements)
+    shapley_indices = qrcs.compute_shapley(utility_wrapper)
+    
+    # Map back to node names
+    shapley_values = {nodes[i]: value for i, value in shapley_indices.items()}
+    
+    return shapley_values
+
+# ==============================================================================
+# Original functions (unchanged)
+# ==============================================================================
 
 # Data readers
 def housing_data_reader(filename='./data/housing_price.csv'):
@@ -29,7 +217,7 @@ def h1n1_data_reader(filename='./data/process_data.csv'):
     y = data['h1n1_vaccine']
     return X, y
 
-def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, limit=7):
+def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, limit=10):
     """
     Plot the comparison of KPIs for different feature selection methods.
 
@@ -146,7 +334,7 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, 
     
     return results
 
-def benchmark_feature_importance(reader, model, filename=None, limit=7):
+def benchmark_feature_importance(reader, model, filename=None, limit=10):
     """
     Benchmark feature importance using different methods.
 
@@ -164,6 +352,11 @@ def benchmark_feature_importance(reader, model, filename=None, limit=7):
     # Compute Shapley values
     shapley_values = shapG(G, m=3, f=lambda G, S: classification_kpi(X, y, S), approximate_by_ratio=False, scale=False)
     cis_values = cis(G, f=lambda G, S: classification_kpi(X, y, S))
+    
+    # Compute QR-CS Shapley values (NEW)
+    print("Computing QR-CS Shapley values...")
+    n_measurements = min(100, 2**(len(X.columns)-1) // 4)
+    qrcs_values = qrcs_shapley(G, lambda G, S: classification_kpi(X, y, S), n_measurements=n_measurements)
     
     # Convert to sorted feature lists for plot_KPI_comparison_by_dict
     feature_rankings = {}
@@ -194,6 +387,18 @@ def benchmark_feature_importance(reader, model, filename=None, limit=7):
             if node in X.columns:
                 feature_rankings['CIS'].append(node)
     
+    # Add QR-CS values (NEW)
+    sorted_qrcs = sorted(qrcs_values.items(), key=lambda x: x[1], reverse=True)
+    feature_rankings['QR-CS'] = []
+    for node, value in sorted_qrcs:
+        try:
+            idx = int(node)
+            if 0 <= idx < len(X.columns):
+                feature_rankings['QR-CS'].append(X.columns[idx])
+        except (ValueError, TypeError):
+            if node in X.columns:
+                feature_rankings['QR-CS'].append(node)
+    
     # Add model feature importances if available
     if hasattr(model, 'feature_importances_'):
         # Train the model to get feature importances
@@ -206,7 +411,8 @@ def benchmark_feature_importance(reader, model, filename=None, limit=7):
     # Plot the comparison
     results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit)
     
-    return shapley_values, cis_values, results
+    return shapley_values, cis_values, qrcs_values, results
+
 # Classification KPI
 def classification_kpi(X, y, S):
     cols = list(S)
@@ -214,7 +420,7 @@ def classification_kpi(X, y, S):
         return 0
     else:
         X_train, X_test, y_train, y_test = train_test_split(X[cols], y, test_size=0.2, random_state=42)
-        model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
+        model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='cpu')
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
         return r2_score(y_test, y_pred)
@@ -222,6 +428,7 @@ def classification_kpi(X, y, S):
 if __name__ == "__main__":
     # Example usage
     model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
-    shapley_values, cis_values, results = benchmark_feature_importance(housing_data_reader, model, filename='housing_benchmark.png')
+    shapley_values, cis_values, qrcs_values, results = benchmark_feature_importance(housing_data_reader, model, filename='housing_benchmark.png')
     print("Shapley values:", shapley_values)
     print("CIS values:", cis_values)
+    print("QR-CS values:", qrcs_values)

@@ -17,9 +17,15 @@ def graph_generator(n_nodes, density, weight_range=(1, 10), seed=2333):
     Returns:
         nx.Graph: Generated graph.
     """
+    # Parameter validation
+    if not isinstance(n_nodes, int) or n_nodes <= 0:
+        raise ValueError("n_nodes must be a positive integer")
+    if not isinstance(density, (int, float)) or density < 0 or density > 1:
+        raise ValueError("density must be between 0 and 1")
+
     random.seed(seed)
     G = nx.Graph()
-    G.add_nodes_from(range(n_nodes))  
+    G.add_nodes_from(range(n_nodes))
     max_edges = n_nodes * (n_nodes - 1) // 2
     n_edges = int(max_edges * density)
 
@@ -41,7 +47,7 @@ def graph_generator(n_nodes, density, weight_range=(1, 10), seed=2333):
 
 def coalition_degree(G, S):
     """Calculate the characteristic function of a coalition in a graph.
-    
+
     This function computes the sum of weighted degrees for nodes in coalition S.
 
     Args:
@@ -53,7 +59,7 @@ def coalition_degree(G, S):
     """
     if not S:  # Handle empty coalition
         return 0
-    
+
     subgraph = G.subgraph(S)
     return sum(dict(subgraph.degree(weight='weight')).values()) / 2
 

@@ -3,8 +3,8 @@ import numpy as np
 from typing import Dict, Union, Optional, Any
 
 def plot(
-    shapley_values: Dict[Any, float], 
-    top_n: int = 10, 
+    shapley_values: Dict[Any, float],
+    top_n: int = 10,
     style: str = 'seaborn-v0_8',
     file_name: Optional[str] = None,
     title: str = 'Top Shapley Values',
@@ -12,7 +12,8 @@ def plot(
     color: str = '#1f77b4',
     show_values: bool = True,
     value_format: str = '{:.2f}',
-    show_plot: bool = True
+    show_plot: bool = True,
+    feature_names: Optional[Dict[Any, str]] = None
 ):
     """Plot the Shapley values as a horizontal bar chart.
 
@@ -27,18 +28,36 @@ def plot(
         show_values (bool, optional): Whether to display values next to bars. Defaults to True.
         value_format (str, optional): Format string for displayed values. Defaults to '{:.2f}'.
     """
+    # Validate input
+    if not isinstance(shapley_values, dict):
+        raise TypeError(f"shapley_values must be a dictionary, got {type(shapley_values)}")
+
     # Sort values in descending order
     sorted_values = sorted(shapley_values.items(), key=lambda item: item[1], reverse=True)
-    
+
     # Select top-n values
     if len(sorted_values) > top_n:
         sorted_values = sorted_values[:top_n]
+
+    # Handle empty case
+    if not sorted_values:
+        nodes, values = [], []
+    else:
+        # Unpack nodes and values
+        nodes, values = zip(*sorted_values)
     
-    # Unpack nodes and values
-    nodes, values = zip(*sorted_values)
-    
-    # Convert node labels to strings for display
-    node_labels = [str(node) for node in nodes]
+    # Convert node labels to strings for display, using feature_names if provided
+    if feature_names:
+        if isinstance(feature_names, dict):
+            node_labels = [feature_names.get(node, str(node)) for node in nodes]
+        elif isinstance(feature_names, (list, tuple)):
+            # Convert list/tuple to dict mapping indices to names
+            feature_dict = {i: name for i, name in enumerate(feature_names)}
+            node_labels = [feature_dict.get(node, str(node)) for node in nodes]
+        else:
+            node_labels = [str(node) for node in nodes]
+    else:
+        node_labels = [str(node) for node in nodes]
     
     # Set the plot style
     plt.style.use(style)
@@ -61,16 +80,16 @@ def plot(
     ax.grid(axis='x', linestyle='--', alpha=0.7)
     
     # Display values next to bars
-    if show_values:
+    if show_values and values:  # Only if there are values to show
         # Determine appropriate offset based on max value
         max_val = max(values)
         offset = max_val * 0.01
-        
+
         for i, bar in enumerate(bars):
             value = values[i]
             ax.text(
-                value + offset, 
-                bar.get_y() + bar.get_height()/2, 
+                value + offset,
+                bar.get_y() + bar.get_height()/2,
                 value_format.format(value),
                 va='center'
             )
