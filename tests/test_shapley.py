@@ -6,12 +6,31 @@ import os
 import numpy as np
 from tabulate import tabulate
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from shapG.core.shapley import shapley_value, graph_generator
+from shapG.core.shapley import shapley_value, graph_generator, coalition_degree
 from shapG import shapG
 
 class TestShapleyValue(unittest.TestCase):
     """Test case for ShapG module functionality."""
-    
+
+    def test_00_shapley_value_coefficients_regression(self):
+        """Ensure exact Shapley values match the known baseline on a toy graph."""
+
+        G = nx.Graph()
+        G.add_weighted_edges_from([(0, 1, 2.0), (1, 2, 1.0)])
+
+        expected_values = {0: 1.0, 1: 1.5, 2: 0.5}
+        computed_values = shapley_value(G)
+
+        self.assertSetEqual(set(computed_values.keys()), set(expected_values.keys()))
+        for node, expected in expected_values.items():
+            self.assertAlmostEqual(computed_values[node], expected, places=6)
+
+        self.assertAlmostEqual(
+            sum(computed_values.values()),
+            coalition_degree(G, set(G.nodes())),
+            places=6,
+        )
+
     @classmethod
     def setUpClass(cls):
         """Setup test graph once before all tests."""
@@ -43,7 +62,6 @@ class TestShapleyValue(unittest.TestCase):
         self.assertEqual(len(TestShapleyValue.shapley_values), TestShapleyValue.G.number_of_nodes())
         
         # Verify efficiency property (sum of values equals characteristic function of entire graph)
-        from shapG.core.shapley import coalition_degree
         total_value = sum(TestShapleyValue.shapley_values.values())
         full_coalition_value = coalition_degree(TestShapleyValue.G, set(TestShapleyValue.G.nodes()))
         self.assertAlmostEqual(total_value, full_coalition_value, places=6)

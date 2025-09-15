@@ -22,8 +22,19 @@ def graph_generator(n_nodes, density, weight_range=(1, 10), seed=2333):
         raise ValueError("n_nodes must be a positive integer")
     if not isinstance(density, (int, float)) or density < 0 or density > 1:
         raise ValueError("density must be between 0 and 1")
+    if weight_range is not None:
+        if not (
+            isinstance(weight_range, (tuple, list))
+            and len(weight_range) == 2
+        ):
+            raise ValueError("weight_range must be a tuple or list of length 2")
+        low, high = weight_range
+        if not (isinstance(low, int) and isinstance(high, int)):
+            raise ValueError("weight_range bounds must be integers")
+        if low > high:
+            raise ValueError("weight_range lower bound cannot exceed upper bound")
 
-    random.seed(seed)
+    rng = random.Random(seed)
     G = nx.Graph()
     G.add_nodes_from(range(n_nodes))
     max_edges = n_nodes * (n_nodes - 1) // 2
@@ -32,7 +43,7 @@ def graph_generator(n_nodes, density, weight_range=(1, 10), seed=2333):
     # Create a list of all possible edges
     all_possible_edges = list(itertools.combinations(range(n_nodes), 2))
     # Shuffle and select the first n_edges
-    random.shuffle(all_possible_edges)
+    rng.shuffle(all_possible_edges)
     selected_edges = all_possible_edges[:n_edges]
     
     # Add the selected edges with weights
@@ -40,7 +51,7 @@ def graph_generator(n_nodes, density, weight_range=(1, 10), seed=2333):
         if weight_range is None:
             G.add_edge(u, v)
         else:
-            weight = random.randint(*weight_range)
+            weight = rng.randint(*weight_range)
             G.add_edge(u, v, weight=weight)
 
     return G
@@ -81,11 +92,10 @@ def shapley_value(G: nx.Graph, f=coalition_degree, verbose=False):
     
     # Precompute factorials and coefficients to improve efficiency
     fact = [factorial(i) for i in range(n_nodes + 1)]
-    
-    coefficients = [
-        (fact[s] * fact[n_nodes - s - 1]) / fact[n_nodes]
-        for s in range(n_nodes)
-    ]
+
+    coefficients = [0.0] * (n_nodes + 1)
+    for s in range(n_nodes):
+        coefficients[s] = (fact[s] * fact[n_nodes - s - 1]) / fact[n_nodes]
     
     # Cache for function evaluations to avoid redundant calculations
     @lru_cache(maxsize=2**15)
@@ -111,7 +121,7 @@ def shapley_value(G: nx.Graph, f=coalition_degree, verbose=False):
             coalition_value = cached_f(coalition)
             
             # Get coefficient for this coalition size
-            coeff = coefficients[r - 1] if r > 0 and r <= n_nodes else 0
+            coeff = coefficients[r] if r < n_nodes else 0
             
             # Use set difference for nodes not in coalition
             coalition_set = set(coalition)
