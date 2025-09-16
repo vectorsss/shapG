@@ -256,10 +256,12 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
 
     # Compute QR-CS Shapley values
     print("\nComputing QR-CS Shapley values...")
+    print(f"Using CVXPY for L1 minimization (much faster than scipy)")
     n_measurements = min(100, 2**(len(X.columns)-1) // 4)
     qrcs_explainer = QRCSExplainer(
         characteristic_function=custom_char_func,
         n_measurements=n_measurements,
+        use_fast_fallback=False,  # Now this should be fast with CVXPY
         verbose=True
     )
     qrcs_values = qrcs_explainer.fit_explain(G)
