@@ -10,6 +10,11 @@ from .utils import (
     create_minimal_edge_graph
 )
 from .graph_construction import GraphBuilder, CoalitionManager
+from .graph_helpers import (
+    graph_generator,
+    get_reachable_nodes_at_depth,
+    coalition_degree
+)
 
 __all__ = [
     # Utilities
@@ -20,5 +25,9 @@ __all__ = [
     'create_minimal_edge_graph',
     # Graph construction
     'GraphBuilder',
-    'CoalitionManager'
+    'CoalitionManager',
+    # Graph helpers
+    'graph_generator',
+    'get_reachable_nodes_at_depth',
+    'coalition_degree'
 ]

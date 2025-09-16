@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import warnings
 from typing import Dict, Union, Optional, Any
 
 def plot(
@@ -28,6 +29,13 @@ def plot(
         show_values (bool, optional): Whether to display values next to bars. Defaults to True.
         value_format (str, optional): Format string for displayed values. Defaults to '{:.2f}'.
     """
+    warnings.warn(
+        "The plot function from shapG.visualization is deprecated and will be removed in version 0.14.0. "
+        "Please use FeatureImportanceVisualizer or plot_shapley_values instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     # Validate input
     if not isinstance(shapley_values, dict):
         raise TypeError(f"shapley_values must be a dictionary, got {type(shapley_values)}")

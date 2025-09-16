@@ -234,8 +234,8 @@ class TestDeprecationWarnings(unittest.TestCase):
                 warning for warning in w
                 if issubclass(warning.category, (DeprecationWarning, FutureWarning))
             ]
-            # We're not enforcing warnings yet
-            self.assertTrue(len(deprecation_warnings) <= 1)
+            # With deprecation warnings now implemented, expect warnings
+            self.assertGreaterEqual(len(deprecation_warnings), 1)
 
 
 class TestEdgeCases(unittest.TestCase):

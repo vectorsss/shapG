@@ -1,6 +1,12 @@
 """
-Benchmark script using QR-CS Shapley with the NEW modular API.
+Benchmark script comparing multiple Shapley value computation methods using the NEW modular API.
 Migrated from benchmark_qr.py to use the new ShapG architecture.
+
+Methods compared:
+- ShapGExplainer: Fast approximate computation using local search and sampling
+- CISExplainer: Combined Imputation Score computation
+- CSExplainer: Coalition Structure-based sampling approach
+- QRCSExplainer: QR-based compressed sensing for Shapley values
 """
 
 import os
@@ -27,6 +33,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname('.'), '..')))
 from shapG import (
     ShapGExplainer,
     CISExplainer,
+    CSExplainer,
+    QRCSExplainer,
     CustomFunction,
     GraphBuilder
 )
@@ -34,195 +42,7 @@ from shapG import (
 # ==============================================================================
 # QR-CS Shapley Implementation with NEW API Integration
 # ==============================================================================
-
-class QRCSExplainer:
-    """
-    QR-CS Shapley value approximation integrated with new ShapG API.
-    Based on: "A novel sparsity-based deterministic method for Shapley value approximation"
-    """
-
-    def __init__(self, n_measurements: Optional[int] = None, tolerance: float = 5e-5, verbose: bool = False):
-        self.n_measurements = n_measurements
-        self.tolerance = tolerance
-        self.verbose = verbose
-        self.graph = None
-        self.characteristic_function = None
-        self._fitted = False
-
-    def fit(self, G: nx.Graph, characteristic_function: Optional[CustomFunction] = None):
-        """Fit the explainer to a graph."""
-        self.graph = G
-        self.n = G.number_of_nodes()
-        self.nodes = list(G.nodes())
-        self.characteristic_function = characteristic_function
-
-        # Initialize QR-CS components
-        self.m = min(2**(self.n - 1), 5000)  # Cap for memory
-
-        if self.n_measurements is None:
-            self.l = min(int(2 * self.n * np.log(max(self.n, 2))), self.m // 2, 500)
-        else:
-            self.l = min(self.n_measurements, self.m)
-
-        # Pre-compute components
-        self.weights = self._compute_shapley_weights()
-        self.Psi = self._get_dct_basis()
-        self.B, self.selected_coalitions = self._compute_measurement_matrix()
-
-        self._fitted = True
-        return self
-
-    def explain(self) -> Dict[int, float]:
-        """Compute QR-CS Shapley values."""
-        if not self._fitted:
-            raise ValueError("Explainer not fitted. Call fit() first.")
-
-        # Create utility wrapper for the graph
-        def utility_wrapper(S: Set[int]) -> float:
-            node_set = {self.nodes[i] for i in S}
-            if self.characteristic_function:
-                return self.characteristic_function(node_set, self.graph)
-            else:
-                # Default to coalition degree
-                from shapG import CoalitionDegree
-                char_func = CoalitionDegree()
-                return char_func(node_set, self.graph)
-
-        # Compute QR-CS Shapley values
-        shapley_indices = self._compute_shapley(utility_wrapper)
-
-        # Map back to node names
-        shapley_values = {self.nodes[i]: value for i, value in shapley_indices.items()}
-
-        return shapley_values
-
-    def fit_explain(self, G: nx.Graph, characteristic_function: Optional[CustomFunction] = None) -> Dict[int, float]:
-        """Fit and explain in one step."""
-        return self.fit(G, characteristic_function).explain()
-
-    def _compute_shapley_weights(self) -> np.ndarray:
-        """Compute Shapley weights"""
-        weights = []
-        for s in range(min(self.n, 20)):
-            weight = math.factorial(s) * math.factorial(self.n - s - 1) / math.factorial(self.n)
-            n_coalitions = self._comb(self.n - 1, s)
-            weights.extend([weight] * min(n_coalitions, self.m - len(weights)))
-            if len(weights) >= self.m:
-                break
-        return np.array(weights[:self.m])
-
-    def _comb(self, n: int, k: int) -> int:
-        """Binomial coefficient"""
-        if k > n or k < 0:
-            return 0
-        if k == 0 or k == n:
-            return 1
-        k = min(k, n - k)
-        c = 1
-        for i in range(k):
-            c = c * (n - i) // (i + 1)
-        return c
-
-    def _get_dct_basis(self) -> np.ndarray:
-        """DCT-II basis"""
-        if self.m > 1000:
-            return np.eye(self.m)
-
-        Psi = np.zeros((self.m, self.m))
-        for k in range(self.m):
-            for n in range(self.m):
-                if k == 0:
-                    Psi[n, k] = np.sqrt(1/self.m)
-                else:
-                    Psi[n, k] = np.sqrt(2/self.m) * np.cos(np.pi * k * (n + 0.5) / self.m)
-        return Psi
-
-    def _compute_measurement_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
-        """QR decomposition for measurement matrix"""
-        V = self.Psi.T
-        Q, R, P = qr(V, pivoting=True, mode='economic' if self.m > 1000 else 'full')
-
-        selected_indices = P[:self.l]
-
-        B = np.zeros((self.l, self.m))
-        for i, idx in enumerate(selected_indices):
-            B[i, idx] = 1
-
-        return B, selected_indices
-
-    def _index_to_coalition(self, idx: int, player: int) -> set:
-        """Convert index to coalition"""
-        coalition = set()
-        available_players = [i for i in range(self.n) if i != player]
-
-        if idx >= 2**(self.n - 1):
-            idx = idx % 2**(self.n - 1)
-
-        for i, p in enumerate(available_players):
-            if idx & (1 << i):
-                coalition.add(p)
-
-        return coalition
-
-    def _compute_shapley(self, utility_func: Callable) -> dict:
-        """Compute Shapley values using QR-CS method"""
-        shapley_values = {}
-
-        for player in range(self.n):
-            if self.verbose:
-                print(f"Computing QR-CS for player {player}/{self.n}")
-
-            # Measure marginal contributions
-            y = np.zeros(self.l)
-
-            for i, coal_idx in enumerate(self.selected_coalitions):
-                coalition = self._index_to_coalition(coal_idx, player)
-
-                v_with = utility_func(coalition | {player})
-                v_without = utility_func(coalition) if coalition else 0
-                y[i] = v_with - v_without
-
-            # Compressed sensing reconstruction
-            try:
-                Q, _, _ = qr(self.Psi, mode='economic' if self.m > 1000 else 'full')
-                Theta = self.B @ self.Psi @ Q
-
-                # L1 minimization
-                s_hat = self._l1_minimization(Theta, y)
-                u_hat = self.Psi @ Q @ s_hat
-
-                shapley_values[player] = np.dot(self.weights[:len(u_hat)], u_hat)
-            except:
-                shapley_values[player] = np.mean(y)
-
-        return shapley_values
-
-    def _l1_minimization(self, A: np.ndarray, b: np.ndarray) -> np.ndarray:
-        """L1 minimization"""
-        m, n = A.shape
-
-        try:
-            x0 = np.linalg.lstsq(A, b, rcond=None)[0]
-        except:
-            x0 = np.zeros(n)
-
-        def objective(x):
-            return np.sum(np.abs(x))
-
-        def constraint(x):
-            return self.tolerance - np.linalg.norm(A @ x - b)
-
-        constraints = {'type': 'ineq', 'fun': constraint}
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = minimize(
-                objective, x0, method='SLSQP',
-                constraints=constraints,
-                options={'maxiter': 200, 'ftol': 1e-6}
-            )
-
-        return result.x if result.success else x0
+# QRCSExplainer is now imported from shapG.explainer - no longer defined locally
 
 
 # ==============================================================================
@@ -361,9 +181,12 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
 
     This function demonstrates:
     - Using GraphBuilder for graph construction
-    - Using different Explainer classes
+    - Using different Explainer classes (ShapG, CIS, CS, QR-CS)
     - Using CustomFunction for characteristic functions
     - Using the new visualization API
+
+    Returns:
+        tuple: (shapley_values, cis_values, cs_values, qrcs_values, results)
     """
     X, y = reader()
 
@@ -420,11 +243,26 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     )
     cis_values = cis_explainer.fit_explain(G)
 
+    # Compute Coalition Structure Shapley values using NEW API
+    # CSExplainer uses predefined coalition structures and sampling
+    # to approximate Shapley values more efficiently than exhaustive computation
+    print("\nComputing Coalition Structure Shapley values...")
+    cs_explainer = CSExplainer(
+        characteristic_function=custom_char_func,
+        n_samples=50,  # Number of coalitions to sample per node
+        verbose=True
+    )
+    cs_values = cs_explainer.fit_explain(G)
+
     # Compute QR-CS Shapley values
     print("\nComputing QR-CS Shapley values...")
     n_measurements = min(100, 2**(len(X.columns)-1) // 4)
-    qrcs_explainer = QRCSExplainer(n_measurements=n_measurements, verbose=True)
-    qrcs_values = qrcs_explainer.fit_explain(G, custom_char_func)
+    qrcs_explainer = QRCSExplainer(
+        characteristic_function=custom_char_func,
+        n_measurements=n_measurements,
+        verbose=True
+    )
+    qrcs_values = qrcs_explainer.fit_explain(G)
 
     # Convert to sorted feature lists for plotting
     feature_rankings = {}
@@ -455,6 +293,14 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
         for node, _ in sorted_cis
     ]
 
+    # Add CS values
+    sorted_cs = sorted(cs_values.items(), key=lambda x: x[1], reverse=True)
+    feature_rankings['CS'] = [
+        node_to_feature_name(node, X.columns)
+        for node, _ in sorted_cs
+        if node_to_feature_name(node, X.columns) is not None
+    ]
+
     # Add QR-CS values
     sorted_qrcs = sorted(qrcs_values.items(), key=lambda x: x[1], reverse=True)
     feature_rankings['QR-CS'] = [
@@ -475,8 +321,8 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     # Plot comparison using the original plotting function
     results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit)
 
-    # Return results matching original benchmark
-    return shapley_values, cis_values, qrcs_values, results
+    # Return results including CS values
+    return shapley_values, cis_values, cs_values, qrcs_values, results
 
 
 if __name__ == "__main__":
@@ -488,10 +334,10 @@ if __name__ == "__main__":
     model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
 
     print("\nRunning benchmark with housing data...")
-    shapley_values, cis_values, qrcs_values, results = benchmark_feature_importance(
+    shapley_values, cis_values, cs_values, qrcs_values, results = benchmark_feature_importance(
         housing_data_reader,
         model,
-        filename='housing_benchmark_qr_new_api.png',
+        filename='housing_benchmark_qr_new_api_new_api.png',
         limit=10
     )
 
@@ -500,4 +346,5 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Shapley values:", shapley_values)
     print("CIS values:", cis_values)
+    print("CS values:", cs_values)
     print("QR-CS values:", qrcs_values)

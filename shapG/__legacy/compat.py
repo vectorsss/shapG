@@ -10,9 +10,12 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
-from ..explainer.explainers import ExactExplainer, ShapGExplainer, CISExplainer
+from ..explainer.exact import ExactExplainer
+from ..explainer.shapg import ShapGExplainer
+from ..explainer.cis import CISExplainer
 from ..characteristic.characteristic_functions import CoalitionDegree, CustomFunction
 from ..utils.graph_construction import GraphBuilder
+from ..utils.graph_helpers import graph_generator as _graph_generator, get_reachable_nodes_at_depth as _get_reachable_nodes_at_depth, coalition_degree as _coalition_degree
 from ..visualization.visualization import plot_shapley_values as _plot_shapley_values
 
 
@@ -27,14 +30,19 @@ def shapley_value(G: nx.Graph, f: Optional[Callable] = None, verbose: bool = Fal
     Returns:
         Dictionary of Shapley values for each node
     """
-    # Handle characteristic function
+    warnings.warn(
+        "shapley_value() is deprecated and will be removed in version 0.14.0. "
+        "Please use ExactExplainer instead: "
+        "explainer = ExactExplainer(); shapley_values = explainer.fit_explain(G)",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     if f is None:
         char_func = CoalitionDegree()
     else:
-        # Wrap the old-style function
         char_func = CustomFunction(lambda coalition, context: f(context, coalition))
 
-    # Use ExactExplainer
     explainer = ExactExplainer(characteristic_function=char_func, verbose=verbose)
     return explainer.fit_explain(G)
 
@@ -62,14 +70,19 @@ def shapG(
     Returns:
         Dictionary of approximated Shapley values for each node
     """
-    # Handle characteristic function
+    warnings.warn(
+        "shapG() is deprecated and will be removed in version 0.14.0. "
+        "Please use ShapGExplainer instead: "
+        "explainer = ShapGExplainer(depth=depth, n_samples=m); shapley_values = explainer.fit_explain(G)",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     if f is None:
         char_func = CoalitionDegree()
     else:
-        # Wrap the old-style function
         char_func = CustomFunction(lambda coalition, context: f(context, coalition))
 
-    # Use ShapGExplainer
     explainer = ShapGExplainer(
         characteristic_function=char_func,
         depth=depth,
@@ -91,8 +104,15 @@ def coalition_degree(G: nx.Graph, S: Union[set, list]) -> float:
     Returns:
         The characteristic value of the coalition
     """
-    char_func = CoalitionDegree()
-    return char_func(set(S) if not isinstance(S, set) else S, G)
+    warnings.warn(
+        "coalition_degree() is deprecated and will be removed in version 0.14.0. "
+        "Please use CoalitionDegree class instead: "
+        "char_func = CoalitionDegree(); value = char_func(coalition, G)",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+    return _coalition_degree(G, S)
 
 
 def cis(G: nx.Graph, f: Optional[Callable] = None) -> Dict[int, float]:
@@ -105,11 +125,16 @@ def cis(G: nx.Graph, f: Optional[Callable] = None) -> Dict[int, float]:
     Returns:
         Dictionary of CIS-values for each node
     """
-    # This is a simplified CIS implementation
-    # For full CIS with model predictions, use CISExplainer directly
+    warnings.warn(
+        "cis() is deprecated and will be removed in version 0.14.0. "
+        "Please use CISExplainer instead: "
+        "explainer = CISExplainer(); cis_values = explainer.fit_explain(G)",
+        DeprecationWarning,
+        stacklevel=2
+    )
 
     if f is None:
-        f = coalition_degree
+        f = _coalition_degree
 
     nodes = list(G.nodes())
     n_nodes = len(nodes)
@@ -144,8 +169,15 @@ def graph_generator(
     Returns:
         Generated NetworkX graph
     """
-    builder = GraphBuilder()
-    return builder.random_graph(n_nodes, density, weight_range, seed)
+    warnings.warn(
+        "graph_generator() is deprecated and will be removed in version 0.14.0. "
+        "Please use GraphBuilder instead: "
+        "builder = GraphBuilder(); G = builder.random_graph(n_nodes, density)",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+    return _graph_generator(n_nodes, density, weight_range, seed)
 
 
 def get_reachable_nodes_at_depth(G: nx.Graph, node: int, depth: int) -> set:
@@ -159,11 +191,17 @@ def get_reachable_nodes_at_depth(G: nx.Graph, node: int, depth: int) -> set:
     Returns:
         Set of nodes that are exactly 'depth' hops away from the source node
     """
-    path_lengths = nx.single_source_shortest_path_length(G, node, cutoff=depth)
-    return {n for n, d in path_lengths.items() if d == depth}
+    warnings.warn(
+        "get_reachable_nodes_at_depth() is deprecated and will be removed in version 0.14.0. "
+        "Please use NetworkX functions directly: "
+        "nx.single_source_shortest_path_length(G, node, cutoff=depth)",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+    return _get_reachable_nodes_at_depth(G, node, depth)
 
 
-# Re-export plot function with backward compatibility
 def plot(
     shapley_values: Union[Dict[int, float], pd.Series],
     feature_names: Optional[list] = None,
@@ -189,6 +227,14 @@ def plot(
     Returns:
         Figure and axes if show_plot is False, None otherwise
     """
+    warnings.warn(
+        "plot() is deprecated and will be removed in version 0.14.0. "
+        "Please use FeatureImportanceVisualizer or plot_shapley_values() instead: "
+        "viz = FeatureImportanceVisualizer(); viz.plot_importance(shapley_values)",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     return _plot_shapley_values(
         shapley_values,
         feature_names=feature_names,
@@ -201,30 +247,3 @@ def plot(
     )
 
 
-# Deprecation warning decorator
-def deprecated(message: str):
-    """Decorator to mark functions as deprecated."""
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            warnings.warn(
-                f"{func.__name__} is deprecated. {message}",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            return func(*args, **kwargs)
-        wrapper.__doc__ = func.__doc__
-        wrapper.__name__ = func.__name__
-        return wrapper
-    return decorator
-
-
-# Optional: Add deprecation warnings for direct imports
-def _warn_old_api():
-    """Issue warning about using old API."""
-    warnings.warn(
-        "You are using the old ShapG API. Consider migrating to the new modular API "
-        "with Explainer classes for better flexibility and performance. "
-        "See the migration guide for details.",
-        FutureWarning,
-        stacklevel=3
-    )

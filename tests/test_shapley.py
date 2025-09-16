@@ -6,7 +6,8 @@ import os
 import numpy as np
 from tabulate import tabulate
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from shapG.core.shapley import shapley_value, graph_generator, coalition_degree
+from shapG.utils.graph_helpers import graph_generator, coalition_degree
+from shapG import shapley_value
 from shapG import shapG
 
 class TestShapleyValue(unittest.TestCase):

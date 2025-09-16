@@ -50,7 +50,8 @@ from .explainer import (
     ExactExplainer,
     ShapGExplainer,
     CISExplainer,
-    CSExplainer
+    CSExplainer,
+    QRCSExplainer
 )
 
 from .characteristic import (
