@@ -51,7 +51,8 @@ from .explainer import (
     ShapGExplainer,
     CISExplainer,
     RandomCSExplainer,
-    QRCSExplainer
+    QRCSExplainer,
+    BlockQRCSExplainer
 )
 
 from .characteristic import (
@@ -104,6 +105,7 @@ __all__ = [
     'CISExplainer',
     'RandomCSExplainer',
     'QRCSExplainer',
+    'BlockQRCSExplainer',
 
     # New API - Characteristic functions
     'CoalitionDegree',

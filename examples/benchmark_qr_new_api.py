@@ -7,6 +7,7 @@ Methods compared:
 - CISExplainer: Combined Imputation Score computation
 - RandomCSExplainer: Random compressed sensing approach using Bernoulli matrices
 - QRCSExplainer: QR-based compressed sensing for Shapley values
+- BlockQRCSExplainer: Block QR-CS for high-dimensional problems with parallel computation
 """
 
 import os
@@ -38,6 +39,7 @@ from shapG import (
     CustomFunction,
     GraphBuilder
 )
+from shapG.explainer import BlockQRCSExplainer
 
 # ==============================================================================
 # QR-CS Shapley Implementation with NEW API Integration
@@ -181,12 +183,12 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
 
     This function demonstrates:
     - Using GraphBuilder for graph construction
-    - Using different Explainer classes (ShapG, CIS, RandomCS, QR-CS)
+    - Using different Explainer classes (ShapG, CIS, RandomCS, QR-CS, Block QR-CS)
     - Using CustomFunction for characteristic functions
     - Using the new visualization API
 
     Returns:
-        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, results)
+        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, results)
     """
     X, y = reader()
 
@@ -268,6 +270,20 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     )
     qrcs_values = qrcs_explainer.fit_explain(G)
 
+    # Compute Block QR-CS Shapley values
+    print("\nComputing Block QR-CS Shapley values...")
+    print(f"Using parallel block computation for scalability")
+    # Use fewer blocks for small problems, more for larger ones
+    n_blocks = min(3, max(2, len(X.columns) // 5))
+    block_qrcs_explainer = BlockQRCSExplainer(
+        characteristic_function=custom_char_func,
+        n_blocks=n_blocks,
+        parallel=True,  # Enable parallel computation
+        use_fast_fallback=True,  # Use fast mode for speed
+        verbose=True
+    )
+    block_qrcs_values = block_qrcs_explainer.fit_explain(G)
+
     # Convert to sorted feature lists for plotting
     feature_rankings = {}
 
@@ -313,6 +329,14 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
         if node_to_feature_name(node, X.columns) is not None
     ]
 
+    # Add Block QR-CS values
+    sorted_block_qrcs = sorted(block_qrcs_values.items(), key=lambda x: x[1], reverse=True)
+    feature_rankings['BlockQRCS'] = [
+        node_to_feature_name(node, X.columns)
+        for node, _ in sorted_block_qrcs
+        if node_to_feature_name(node, X.columns) is not None
+    ]
+
     # Add model feature importances (if model is provided and trained)
     if model and hasattr(model, 'feature_importances_'):
         # Train model if not already trained
@@ -325,8 +349,8 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     # Plot comparison using the original plotting function
     results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit)
 
-    # Return results including Random CS values
-    return shapley_values, cis_values, random_cs_values, qrcs_values, results
+    # Return results including all CS variants
+    return shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, results
 
 
 if __name__ == "__main__":
@@ -338,7 +362,7 @@ if __name__ == "__main__":
     model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
 
     print("\nRunning benchmark with housing data...")
-    shapley_values, cis_values, random_cs_values, qrcs_values, results = benchmark_feature_importance(
+    shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, results = benchmark_feature_importance(
         housing_data_reader,
         model,
         filename='housing_benchmark_qr_new_api_new_api.png',
@@ -352,3 +376,4 @@ if __name__ == "__main__":
     print("CIS values:", cis_values)
     print("Random CS values:", random_cs_values)
     print("QR-CS values:", qrcs_values)
+    print("Block QR-CS values:", block_qrcs_values)

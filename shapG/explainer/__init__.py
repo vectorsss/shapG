@@ -8,6 +8,7 @@ from .shapg import ShapGExplainer
 from .cis import CISExplainer
 from .random_cs import RandomCSExplainer
 from .qrcs import QRCSExplainer
+from .block_qrcs import BlockQRCSExplainer
 
 __all__ = [
     # Base classes
@@ -19,5 +20,6 @@ __all__ = [
     'ShapGExplainer',
     'CISExplainer',
     'RandomCSExplainer',
-    'QRCSExplainer'
+    'QRCSExplainer',
+    'BlockQRCSExplainer'
 ]
