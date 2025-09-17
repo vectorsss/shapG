@@ -6,7 +6,7 @@ from .base import CharacteristicFunction, Explainer, GraphExplainer
 from .exact import ExactExplainer
 from .shapg import ShapGExplainer
 from .cis import CISExplainer
-from .cs import CSExplainer
+from .random_cs import RandomCSExplainer
 from .qrcs import QRCSExplainer
 
 __all__ = [
@@ -18,6 +18,6 @@ __all__ = [
     'ExactExplainer',
     'ShapGExplainer',
     'CISExplainer',
-    'CSExplainer',
+    'RandomCSExplainer',
     'QRCSExplainer'
 ]

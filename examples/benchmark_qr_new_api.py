@@ -5,7 +5,7 @@ Migrated from benchmark_qr.py to use the new ShapG architecture.
 Methods compared:
 - ShapGExplainer: Fast approximate computation using local search and sampling
 - CISExplainer: Combined Imputation Score computation
-- CSExplainer: Coalition Structure-based sampling approach
+- RandomCSExplainer: Random compressed sensing approach using Bernoulli matrices
 - QRCSExplainer: QR-based compressed sensing for Shapley values
 """
 
@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname('.'), '..')))
 from shapG import (
     ShapGExplainer,
     CISExplainer,
-    CSExplainer,
+    RandomCSExplainer,
     QRCSExplainer,
     CustomFunction,
     GraphBuilder
@@ -181,12 +181,12 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
 
     This function demonstrates:
     - Using GraphBuilder for graph construction
-    - Using different Explainer classes (ShapG, CIS, CS, QR-CS)
+    - Using different Explainer classes (ShapG, CIS, RandomCS, QR-CS)
     - Using CustomFunction for characteristic functions
     - Using the new visualization API
 
     Returns:
-        tuple: (shapley_values, cis_values, cs_values, qrcs_values, results)
+        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, results)
     """
     X, y = reader()
 
@@ -243,16 +243,18 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     )
     cis_values = cis_explainer.fit_explain(G)
 
-    # Compute Coalition Structure Shapley values using NEW API
-    # CSExplainer uses predefined coalition structures and sampling
-    # to approximate Shapley values more efficiently than exhaustive computation
-    print("\nComputing Coalition Structure Shapley values...")
-    cs_explainer = CSExplainer(
+    # Compute Random CS Shapley values using NEW API
+    # RandomCSExplainer uses random Bernoulli matrices and iterative sampling
+    # to approximate Shapley values using compressed sensing
+    print("\nComputing Random CS Shapley values...")
+    random_cs_explainer = RandomCSExplainer(
         characteristic_function=custom_char_func,
-        n_samples=50,  # Number of coalitions to sample per node
-        verbose=True
+        m=50,  # Number of measurements per iteration
+        t=30,  # Number of iterations
+        verbose=True,
+        seed=42  # For reproducibility
     )
-    cs_values = cs_explainer.fit_explain(G)
+    random_cs_values = random_cs_explainer.fit_explain(G)
 
     # Compute QR-CS Shapley values
     print("\nComputing QR-CS Shapley values...")
@@ -261,7 +263,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     qrcs_explainer = QRCSExplainer(
         characteristic_function=custom_char_func,
         n_measurements=n_measurements,
-        use_fast_fallback=False,  # Now this should be fast with CVXPY
+        use_fast_fallback=True,  # Now this should be fast with CVXPY
         verbose=True
     )
     qrcs_values = qrcs_explainer.fit_explain(G)
@@ -295,11 +297,11 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
         for node, _ in sorted_cis
     ]
 
-    # Add CS values
-    sorted_cs = sorted(cs_values.items(), key=lambda x: x[1], reverse=True)
-    feature_rankings['CS'] = [
+    # Add Random CS values
+    sorted_random_cs = sorted(random_cs_values.items(), key=lambda x: x[1], reverse=True)
+    feature_rankings['RandomCS'] = [
         node_to_feature_name(node, X.columns)
-        for node, _ in sorted_cs
+        for node, _ in sorted_random_cs
         if node_to_feature_name(node, X.columns) is not None
     ]
 
@@ -323,8 +325,8 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     # Plot comparison using the original plotting function
     results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit)
 
-    # Return results including CS values
-    return shapley_values, cis_values, cs_values, qrcs_values, results
+    # Return results including Random CS values
+    return shapley_values, cis_values, random_cs_values, qrcs_values, results
 
 
 if __name__ == "__main__":
@@ -336,7 +338,7 @@ if __name__ == "__main__":
     model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
 
     print("\nRunning benchmark with housing data...")
-    shapley_values, cis_values, cs_values, qrcs_values, results = benchmark_feature_importance(
+    shapley_values, cis_values, random_cs_values, qrcs_values, results = benchmark_feature_importance(
         housing_data_reader,
         model,
         filename='housing_benchmark_qr_new_api_new_api.png',
@@ -348,5 +350,5 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Shapley values:", shapley_values)
     print("CIS values:", cis_values)
-    print("CS values:", cs_values)
+    print("Random CS values:", random_cs_values)
     print("QR-CS values:", qrcs_values)

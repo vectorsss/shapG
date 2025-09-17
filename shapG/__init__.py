@@ -50,7 +50,7 @@ from .explainer import (
     ExactExplainer,
     ShapGExplainer,
     CISExplainer,
-    CSExplainer,
+    RandomCSExplainer,
     QRCSExplainer
 )
 
@@ -102,7 +102,8 @@ __all__ = [
     'ExactExplainer',
     'ShapGExplainer',
     'CISExplainer',
-    'CSExplainer',
+    'RandomCSExplainer',
+    'QRCSExplainer',
 
     # New API - Characteristic functions
     'CoalitionDegree',
