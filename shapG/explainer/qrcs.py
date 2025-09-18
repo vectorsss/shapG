@@ -42,7 +42,7 @@ class QRCSExplainer(GraphExplainer):
         characteristic_function: Optional[CharacteristicFunction] = None,
         n_measurements: Optional[int] = None,
         tolerance: float = 5e-5,
-        use_fast_fallback: bool = True,
+        use_fast_fallback: bool = False,
         verbose: bool = False
     ):
         """Initialize QR-CS explainer.
@@ -89,9 +89,9 @@ class QRCSExplainer(GraphExplainer):
             self.l = min(self.n_measurements, self.m)
 
         # Pre-compute components
-        self.weights = self._compute_shapley_weights()
+        self.weights = self._compute_weights_per_index()
         self.Psi = self._get_dct_basis()
-        self.B, self.selected_coalitions = self._compute_measurement_matrix()
+        self.B, self.selected_coalitions, self.Q_from_V = self._compute_measurement_matrix()
 
         self._fitted = True
         return self
@@ -126,16 +126,17 @@ class QRCSExplainer(GraphExplainer):
 
         return shapley_values
 
-    def _compute_shapley_weights(self) -> np.ndarray:
-        """Compute Shapley weights for coalition contributions."""
-        weights = []
-        for s in range(min(self.n, 20)):
-            weight = math.factorial(s) * math.factorial(self.n - s - 1) / math.factorial(self.n)
-            n_coalitions = self._comb(self.n - 1, s)
-            weights.extend([weight] * min(n_coalitions, self.m - len(weights)))
-            if len(weights) >= self.m:
-                break
-        return np.array(weights[:self.m])
+    def _compute_weights_per_index(self) -> np.ndarray:
+        """Compute Shapley weights aligned per coalition index (bit-count based)."""
+        weights = np.zeros(self.m)
+        fact_cache = {k: math.factorial(k) for k in range(self.n + 1)}
+        for j in range(self.m):
+            # Coalition size is the number of set bits in j (players other than the target)
+            s = int(bin(j).count("1"))
+            # w = s!(n-s-1)! / n!
+            w = (fact_cache[s] * fact_cache[self.n - s - 1]) / fact_cache[self.n]
+            weights[j] = w
+        return weights
 
     def _comb(self, n: int, k: int) -> int:
         """Compute binomial coefficient C(n,k)."""
@@ -163,7 +164,7 @@ class QRCSExplainer(GraphExplainer):
                     Psi[n, k] = np.sqrt(2/self.m) * np.cos(np.pi * k * (n + 0.5) / self.m)
         return Psi
 
-    def _compute_measurement_matrix(self) -> Tuple[np.ndarray, np.ndarray]:
+    def _compute_measurement_matrix(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute measurement matrix using QR decomposition.
 
         Per the paper: We perform QR decomposition with column pivoting on Ψ^T
@@ -181,7 +182,8 @@ class QRCSExplainer(GraphExplainer):
         for i, idx in enumerate(selected_indices):
             B[i, idx] = 1
 
-        return B, selected_indices
+        # Return also Q from the QR on V so that Θ = B @ Ψ @ Q
+        return B, selected_indices, Q
 
     def _index_to_coalition(self, idx: int, player: int) -> set:
         """Convert coalition index to set of players (excluding target player)."""
@@ -207,15 +209,8 @@ class QRCSExplainer(GraphExplainer):
         """
         shapley_values = {}
 
-        # Pre-compute Q for efficiency (can be done once per instance)
-        if self.m > 1000:
-            # For large m, use identity basis for efficiency
-            Q = np.eye(self.m)
-        else:
-            Q, _ = qr(self.Psi, mode='full')
-
-        # Pre-compute sensing matrix Theta = B @ Psi @ Q
-        Theta = self.B @ self.Psi @ Q
+        # Use Q from the QR decomposition on V = Ψ^T (per paper eq. 18)
+        Theta = self.B @ self.Psi @ self.Q_from_V
 
         for player in range(self.n):
             if self.verbose:
@@ -242,10 +237,10 @@ class QRCSExplainer(GraphExplainer):
                     s_hat = self._l1_minimization(Theta, y)
 
                     # Transform back to original domain
-                    u_hat = self.Psi @ Q @ s_hat
+                    u_hat = self.Psi @ self.Q_from_V @ s_hat
 
                     # Step 3: Compute Shapley value as weighted sum
-                    shapley_values[player] = np.dot(self.weights[:len(u_hat)], u_hat)
+                    shapley_values[player] = float(np.dot(self.weights[:len(u_hat)], u_hat))
                 except Exception as e:
                     if self.verbose:
                         print(f"Warning: QR-CS reconstruction failed for player {player}, using fallback: {str(e)}")

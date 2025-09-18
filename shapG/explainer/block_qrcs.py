@@ -50,7 +50,7 @@ class BlockQRCSExplainer(GraphExplainer):
         block_sizes: Optional[List[int]] = None,
         n_measurements_per_block: Optional[List[int]] = None,
         tolerance: float = 5e-5,
-        use_fast_fallback: bool = True,
+        use_fast_fallback: bool = False,
         parallel: bool = True,
         max_workers: Optional[int] = None,
         verbose: bool = False
@@ -101,6 +101,9 @@ class BlockQRCSExplainer(GraphExplainer):
         # Compute total coalition space size
         self.m_total = min(2**(self.n - 1), 5000)  # Cap for memory
 
+        # Precompute global per-index weights aligned with coalition indexing
+        self.weights_full = self._compute_global_weights()
+
         # Divide into blocks
         self._setup_blocks()
 
@@ -136,6 +139,17 @@ class BlockQRCSExplainer(GraphExplainer):
                 zip(self.block_sizes, self.n_measurements_per_block, self.block_ranges)
             ):
                 print(f"  Block {i}: size={size}, measurements={n_meas}, range=[{start}:{end})")
+
+    def _compute_global_weights(self) -> np.ndarray:
+        """Compute Shapley weights per global coalition index via popcount."""
+        weights = np.zeros(self.m_total)
+        # factorial cache
+        fact_cache = {k: math.factorial(k) for k in range(self.n + 1)}
+        for j in range(self.m_total):
+            s = int(bin(j).count("1"))
+            w = (fact_cache[s] * fact_cache[self.n - s - 1]) / fact_cache[self.n]
+            weights[j] = w
+        return weights
 
     def explain(
         self,
@@ -186,8 +200,8 @@ class BlockQRCSExplainer(GraphExplainer):
         if self.verbose:
             print(f"Computing {self.n_blocks} blocks in parallel...")
 
-        # Aggregate results from all blocks
-        all_shapley_contributions = {i: [] for i in range(self.n)}
+        # Aggregate results from all blocks (sum contributions across blocks)
+        shapley_sum = {i: 0.0 for i in range(self.n)}
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all block computations
@@ -206,9 +220,9 @@ class BlockQRCSExplainer(GraphExplainer):
                 try:
                     block_shapley = future.result()
 
-                    # Aggregate block contributions
+                    # Aggregate block contributions by summation
                     for player, value in block_shapley.items():
-                        all_shapley_contributions[player].append(value)
+                        shapley_sum[player] += float(value)
 
                     if self.verbose:
                         print(f"  Block {block_idx} completed")
@@ -216,15 +230,10 @@ class BlockQRCSExplainer(GraphExplainer):
                 except Exception as e:
                     if self.verbose:
                         print(f"  Block {block_idx} failed: {e}")
-                    # Use fallback for failed block
-                    for player in range(self.n):
-                        all_shapley_contributions[player].append(0)
+                    # On failure, skip (equivalent to adding zero)
 
-        # Combine block results (average across blocks)
-        shapley_values = {}
-        for player in range(self.n):
-            contributions = all_shapley_contributions[player]
-            shapley_values[player] = np.mean(contributions) if contributions else 0
+        # Combine block results (sum across blocks to reconstruct full dot product)
+        shapley_values = {player: shapley_sum[player] for player in range(self.n)}
 
         return shapley_values
 
@@ -233,24 +242,21 @@ class BlockQRCSExplainer(GraphExplainer):
         if self.verbose:
             print(f"Computing {self.n_blocks} blocks sequentially...")
 
-        # Aggregate results from all blocks
-        all_shapley_contributions = {i: [] for i in range(self.n)}
+        # Aggregate results from all blocks (sum contributions across blocks)
+        shapley_sum = {i: 0.0 for i in range(self.n)}
 
         for block_idx in range(self.n_blocks):
             block_shapley = self._compute_single_block(block_idx, utility_func)
 
-            # Aggregate block contributions
+            # Aggregate block contributions by summation
             for player, value in block_shapley.items():
-                all_shapley_contributions[player].append(value)
+                shapley_sum[player] += float(value)
 
             if self.verbose:
                 print(f"  Block {block_idx} completed")
 
-        # Combine block results (average across blocks)
-        shapley_values = {}
-        for player in range(self.n):
-            contributions = all_shapley_contributions[player]
-            shapley_values[player] = np.mean(contributions) if contributions else 0
+        # Combine block results (sum across blocks)
+        shapley_values = {player: shapley_sum[player] for player in range(self.n)}
 
         return shapley_values
 
@@ -268,25 +274,19 @@ class BlockQRCSExplainer(GraphExplainer):
         block_size = self.block_sizes[block_idx]
         n_measurements = self.n_measurements_per_block[block_idx]
 
-        # Generate block-specific weights
-        weights = self._compute_block_weights(start, end)
+        # Generate block-specific weights by slicing global weights
+        weights = self.weights_full[start:end]
 
         # Generate block-specific DCT basis
         Psi = self._get_block_dct_basis(block_size)
 
-        # Compute block measurement matrix using QR
-        B, selected_indices = self._compute_block_measurement_matrix(
+        # Compute block measurement matrix using QR and get Q from QR(V)
+        B, selected_indices, Q_from_V = self._compute_block_measurement_matrix(
             Psi, n_measurements, block_size
         )
 
-        # Pre-compute Q for efficiency
-        if block_size > 100:
-            Q = np.eye(block_size)
-        else:
-            Q, _ = qr(Psi, mode='full')
-
-        # Pre-compute sensing matrix Theta = B @ Psi @ Q
-        Theta = B @ Psi @ Q
+        # Pre-compute sensing matrix Θ = B @ Ψ @ Q (Q from QR on V = Ψ^T)
+        Theta = B @ Psi @ Q_from_V
 
         shapley_values = {}
 
@@ -312,7 +312,7 @@ class BlockQRCSExplainer(GraphExplainer):
                     s_hat = self._l1_minimization_block(Theta, y)
 
                     # Transform back to original domain
-                    u_hat = Psi @ Q @ s_hat
+                    u_hat = Psi @ Q_from_V @ s_hat
 
                     # Compute Shapley value as weighted sum for this block
                     shapley_values[player] = np.dot(weights[:len(u_hat)], u_hat)
@@ -325,18 +325,8 @@ class BlockQRCSExplainer(GraphExplainer):
         return shapley_values
 
     def _compute_block_weights(self, start: int, end: int) -> np.ndarray:
-        """Compute Shapley weights for coalitions in this block."""
-        block_size = end - start
-        weights = np.zeros(block_size)
-
-        for i in range(block_size):
-            # Approximate coalition size from index
-            # This is simplified - in practice would need proper mapping
-            coalition_size = min(i // max(1, block_size // self.n), self.n - 1)
-            weight = math.factorial(coalition_size) * math.factorial(self.n - coalition_size - 1) / math.factorial(self.n)
-            weights[i] = weight
-
-        return weights
+        """Deprecated: kept for backward-compat; now we slice global weights."""
+        return self.weights_full[start:end]
 
     def _get_block_dct_basis(self, block_size: int) -> np.ndarray:
         """Generate DCT-II basis matrix for this block."""
@@ -357,8 +347,8 @@ class BlockQRCSExplainer(GraphExplainer):
         Psi: np.ndarray,
         n_measurements: int,
         block_size: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Compute measurement matrix for this block using QR decomposition."""
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Compute measurement matrix for this block using QR decomposition and return Q from QR(V)."""
         V = Psi.T
         Q, R, P = qr(V, pivoting=True, mode='economic' if block_size > 100 else 'full')
 
@@ -370,7 +360,7 @@ class BlockQRCSExplainer(GraphExplainer):
         for i, idx in enumerate(selected_indices):
             B[i, idx] = 1
 
-        return B, selected_indices
+        return B, selected_indices, Q
 
     def _index_to_coalition(self, idx: int, player: int) -> set:
         """Convert coalition index to set of players (excluding target player)."""

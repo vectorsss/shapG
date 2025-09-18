@@ -265,7 +265,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     qrcs_explainer = QRCSExplainer(
         characteristic_function=custom_char_func,
         n_measurements=n_measurements,
-        use_fast_fallback=True,  # Now this should be fast with CVXPY
+        use_fast_fallback=False,  # Now this should be fast with CVXPY
         verbose=True
     )
     qrcs_values = qrcs_explainer.fit_explain(G)
