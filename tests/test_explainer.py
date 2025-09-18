@@ -10,13 +10,15 @@ import networkx as nx
 from unittest.mock import Mock, patch
 import sys
 import os
+import random
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from shapG.explainer import (
     CharacteristicFunction, Explainer, GraphExplainer,
-    ExactExplainer, ShapGExplainer, CISExplainer, CSExplainer
+    ExactExplainer, ShapGExplainer, CISExplainer,
+    RandomCSExplainer, QRCSExplainer, BlockQRCSExplainer
 )
 from shapG.characteristic import CoalitionDegree, NodeCount, CustomFunction
 
@@ -392,8 +394,8 @@ class TestCISExplainer(unittest.TestCase):
             self.assertAlmostEqual(values[node], expected, places=6)
 
 
-class TestCSExplainer(unittest.TestCase):
-    """Test CSExplainer (Coalition Structure) class."""
+class TestRandomCSExplainer(unittest.TestCase):
+    """Test RandomCSExplainer (Random Compressed Sensing) class."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -402,19 +404,35 @@ class TestCSExplainer(unittest.TestCase):
         self.char_func = CoalitionDegree()
 
     def test_initialization(self):
-        """Test CSExplainer initialization."""
-        explainer = CSExplainer(
+        """Test RandomCSExplainer initialization."""
+        explainer = RandomCSExplainer(
             characteristic_function=self.char_func,
-            max_coalition_size=3,
-            verbose=True
+            m=100,
+            t=50,
+            tolerance=1e-3,
+            verbose=True,
+            seed=42
         )
         self.assertEqual(explainer.characteristic_function, self.char_func)
-        self.assertEqual(explainer.max_coalition_size, 3)
+        self.assertEqual(explainer.m, 100)
+        self.assertEqual(explainer.t, 50)
+        self.assertEqual(explainer.tolerance, 1e-3)
         self.assertTrue(explainer.verbose)
+        self.assertEqual(explainer.seed, 42)
+
+    def test_default_parameters(self):
+        """Test default parameter values."""
+        explainer = RandomCSExplainer()
+        self.assertIsInstance(explainer.characteristic_function, CoalitionDegree)
+        self.assertEqual(explainer.m, 100)
+        self.assertEqual(explainer.t, 50)
+        self.assertEqual(explainer.tolerance, 1e-3)
+        self.assertFalse(explainer.verbose)
+        self.assertIsNone(explainer.seed)
 
     def test_fit_and_explain(self):
         """Test fit and explain methods."""
-        explainer = CSExplainer(self.char_func, max_coalition_size=2)
+        explainer = RandomCSExplainer(m=50, t=20, seed=42)
         values = explainer.fit_explain(self.G)
 
         # Check output structure
@@ -425,27 +443,254 @@ class TestCSExplainer(unittest.TestCase):
         for v in values.values():
             self.assertIsInstance(v, (int, float))
 
-    def test_max_coalition_size_constraint(self):
-        """Test that max_coalition_size is respected."""
-        explainer = CSExplainer(self.char_func, max_coalition_size=2)
-        explainer.fit(self.G)
+    def test_reproducibility_with_seed(self):
+        """Test that results are reproducible with same seed."""
+        # Create two separate instances and run them independently
+        # Reset random state between runs to ensure reproducibility
 
-        # Check that coalitions don't exceed max size
-        # This is internal behavior, hard to test directly
-        values = explainer.explain()
-        self.assertIsInstance(values, dict)
+        # First run
+        np.random.seed(100)
+        random.seed(100)
+        explainer1 = RandomCSExplainer(m=50, t=20, seed=42)
+        values1 = explainer1.fit_explain(self.G)
 
-    def test_different_max_sizes(self):
-        """Test with different maximum coalition sizes."""
-        explainer1 = CSExplainer(self.char_func, max_coalition_size=2)
-        explainer2 = CSExplainer(self.char_func, max_coalition_size=3)
+        # Second run with same setup
+        np.random.seed(100)
+        random.seed(100)
+        explainer2 = RandomCSExplainer(m=50, t=20, seed=42)
+        values2 = explainer2.fit_explain(self.G)
+
+        # Should produce identical results with same seed
+        for node in self.G.nodes():
+            self.assertAlmostEqual(values1[node], values2[node], places=5)
+
+    def test_different_parameters_produce_different_results(self):
+        """Test that different parameters produce different results."""
+        explainer1 = RandomCSExplainer(m=30, t=10, seed=42)
+        explainer2 = RandomCSExplainer(m=100, t=50, seed=42)
 
         values1 = explainer1.fit_explain(self.G)
         values2 = explainer2.fit_explain(self.G)
 
-        # Should produce different results
+        # Should produce different results with different parameters
+        self.assertNotEqual(values1, values2)
+
+    def test_batch_explain(self):
+        """Test batch explanation with multiple runs."""
+        explainer = RandomCSExplainer(m=50, t=20, seed=42)
+        explainer.fit(self.G)
+
+        batch_results = explainer.explain_batch(n_runs=5)
+
+        # Should return mean and std for each node
+        self.assertIsInstance(batch_results, dict)
+        for node in self.G.nodes():
+            self.assertIn(node, batch_results)
+            self.assertIsInstance(batch_results[node], tuple)
+            self.assertEqual(len(batch_results[node]), 2)  # (mean, std)
+
+
+class TestQRCSExplainer(unittest.TestCase):
+    """Test QRCSExplainer (QR-based Compressed Sensing) class."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.G = nx.Graph()
+        self.G.add_edges_from([(0, 1), (1, 2), (2, 0)])
+        self.char_func = CoalitionDegree()
+
+    def test_initialization(self):
+        """Test QRCSExplainer initialization."""
+        explainer = QRCSExplainer(
+            characteristic_function=self.char_func,
+            n_measurements=50,
+            tolerance=5e-5,
+            use_fast_fallback=False,
+            verbose=True
+        )
+        self.assertEqual(explainer.characteristic_function, self.char_func)
+        self.assertEqual(explainer.n_measurements, 50)
+        self.assertEqual(explainer.tolerance, 5e-5)
+        self.assertFalse(explainer.use_fast_fallback)
+        self.assertTrue(explainer.verbose)
+
+    def test_default_parameters(self):
+        """Test default parameter values."""
+        explainer = QRCSExplainer()
+        self.assertIsInstance(explainer.characteristic_function, CoalitionDegree)
+        self.assertIsNone(explainer.n_measurements)  # Auto-determined
+        self.assertEqual(explainer.tolerance, 5e-5)
+        self.assertFalse(explainer.use_fast_fallback)
+        self.assertFalse(explainer.verbose)
+
+    def test_fit_and_explain(self):
+        """Test fit and explain methods."""
+        explainer = QRCSExplainer(n_measurements=10, use_fast_fallback=False)
+        values = explainer.fit_explain(self.G)
+
+        # Check output structure
+        self.assertIsInstance(values, dict)
+        self.assertEqual(set(values.keys()), set(self.G.nodes()))
+
+        # All values should be numeric
+        for v in values.values():
+            self.assertIsInstance(v, (int, float))
+
+    def test_fast_fallback_mode(self):
+        """Test fast fallback mode."""
+        explainer1 = QRCSExplainer(use_fast_fallback=True)
+        explainer2 = QRCSExplainer(use_fast_fallback=False)
+
+        values1 = explainer1.fit_explain(self.G)
+        values2 = explainer2.fit_explain(self.G)
+
+        # Both should produce valid results
         self.assertEqual(set(values1.keys()), set(values2.keys()))
-        # Results might be same for this simple case, but structure should be maintained
+
+        # Results might differ due to different computation methods
+        # Fast fallback uses mean approximation
+
+    def test_automatic_measurement_determination(self):
+        """Test automatic determination of n_measurements."""
+        explainer = QRCSExplainer()  # n_measurements=None
+        explainer.fit(self.G)
+
+        # Should automatically determine n_measurements
+        self.assertIsNotNone(explainer.l)
+        self.assertGreater(explainer.l, 0)
+
+        values = explainer.explain()
+        self.assertIsInstance(values, dict)
+
+    def test_deterministic_results(self):
+        """Test that QR-CS produces deterministic results."""
+        explainer1 = QRCSExplainer(n_measurements=10, use_fast_fallback=False)
+        explainer2 = QRCSExplainer(n_measurements=10, use_fast_fallback=False)
+
+        values1 = explainer1.fit_explain(self.G)
+        values2 = explainer2.fit_explain(self.G)
+
+        # Should produce identical results (deterministic method)
+        for node in self.G.nodes():
+            self.assertAlmostEqual(values1[node], values2[node], places=6)
+
+
+class TestBlockQRCSExplainer(unittest.TestCase):
+    """Test BlockQRCSExplainer (Block QR-based Compressed Sensing) class."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.G = nx.Graph()
+        self.G.add_edges_from([(0, 1), (1, 2), (2, 0), (3, 4), (4, 5)])
+        self.char_func = CoalitionDegree()
+
+    def test_initialization(self):
+        """Test BlockQRCSExplainer initialization."""
+        explainer = BlockQRCSExplainer(
+            characteristic_function=self.char_func,
+            n_blocks=4,
+            block_sizes=[10, 10, 10, 10],
+            n_measurements_per_block=[5, 5, 5, 5],
+            tolerance=5e-5,
+            use_fast_fallback=False,
+            parallel=True,
+            max_workers=2,
+            verbose=True
+        )
+        self.assertEqual(explainer.characteristic_function, self.char_func)
+        self.assertEqual(explainer.n_blocks, 4)
+        self.assertEqual(explainer.block_sizes, [10, 10, 10, 10])
+        self.assertEqual(explainer.n_measurements_per_block, [5, 5, 5, 5])
+        self.assertEqual(explainer.tolerance, 5e-5)
+        self.assertFalse(explainer.use_fast_fallback)
+        self.assertTrue(explainer.parallel)
+        self.assertEqual(explainer.max_workers, 2)
+        self.assertTrue(explainer.verbose)
+
+    def test_default_parameters(self):
+        """Test default parameter values."""
+        explainer = BlockQRCSExplainer()
+        self.assertIsInstance(explainer.characteristic_function, CoalitionDegree)
+        self.assertEqual(explainer.n_blocks, 4)
+        self.assertIsNone(explainer.block_sizes)  # Auto-determined
+        self.assertIsNone(explainer.n_measurements_per_block)  # Auto-determined
+        self.assertEqual(explainer.tolerance, 5e-5)
+        self.assertFalse(explainer.use_fast_fallback)
+        self.assertTrue(explainer.parallel)
+        self.assertIsNone(explainer.max_workers)
+        self.assertFalse(explainer.verbose)
+
+    def test_fit_and_explain(self):
+        """Test fit and explain methods."""
+        explainer = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
+        values = explainer.fit_explain(self.G)
+
+        # Check output structure
+        self.assertIsInstance(values, dict)
+        self.assertEqual(set(values.keys()), set(self.G.nodes()))
+
+        # All values should be numeric
+        for v in values.values():
+            self.assertIsInstance(v, (int, float))
+
+    def test_parallel_vs_sequential(self):
+        """Test parallel vs sequential computation."""
+        explainer_parallel = BlockQRCSExplainer(n_blocks=2, parallel=True)
+        explainer_sequential = BlockQRCSExplainer(n_blocks=2, parallel=False)
+
+        values_parallel = explainer_parallel.fit_explain(self.G)
+        values_sequential = explainer_sequential.fit_explain(self.G)
+
+        # Should produce similar results
+        for node in self.G.nodes():
+            self.assertAlmostEqual(values_parallel[node], values_sequential[node], places=5)
+
+    def test_different_block_sizes(self):
+        """Test with different numbers of blocks."""
+        explainer1 = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=True)
+        explainer2 = BlockQRCSExplainer(n_blocks=4, parallel=False, use_fast_fallback=True)
+
+        values1 = explainer1.fit_explain(self.G)
+        values2 = explainer2.fit_explain(self.G)
+
+        # Both should produce valid results
+        self.assertEqual(set(values1.keys()), set(values2.keys()))
+
+        # Results might vary due to different block decomposition
+        # Just check that all values are reasonable (not NaN or infinite)
+        for node in self.G.nodes():
+            self.assertIsInstance(values1[node], (int, float))
+            self.assertIsInstance(values2[node], (int, float))
+            self.assertFalse(np.isnan(values1[node]))
+            self.assertFalse(np.isnan(values2[node]))
+            self.assertFalse(np.isinf(values1[node]))
+            self.assertFalse(np.isinf(values2[node]))
+
+    def test_automatic_block_setup(self):
+        """Test automatic block size determination."""
+        explainer = BlockQRCSExplainer(n_blocks=3)
+        explainer.fit(self.G)
+
+        # Should automatically determine block sizes
+        self.assertIsNotNone(explainer.block_sizes)
+        self.assertEqual(len(explainer.block_sizes), 3)
+        self.assertEqual(sum(explainer.block_sizes), explainer.m_total)
+
+        # Should automatically determine measurements per block
+        self.assertIsNotNone(explainer.n_measurements_per_block)
+        self.assertEqual(len(explainer.n_measurements_per_block), 3)
+
+    def test_deterministic_results(self):
+        """Test that Block QR-CS produces deterministic results."""
+        explainer1 = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
+        explainer2 = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
+
+        values1 = explainer1.fit_explain(self.G)
+        values2 = explainer2.fit_explain(self.G)
+
+        # Should produce identical results (deterministic method)
+        for node in self.G.nodes():
+            self.assertAlmostEqual(values1[node], values2[node], places=6)
 
 
 

@@ -16,7 +16,8 @@ from shapG import (
     ExactExplainer,
     ShapGExplainer,
     CISExplainer,
-    CSExplainer,
+    RandomCSExplainer,
+    QRCSExplainer,
     CoalitionDegree,
     NodeCount,
     WeightedSum,
@@ -25,6 +26,7 @@ from shapG import (
     CoalitionManager,
     FeatureImportanceVisualizer
 )
+from shapG.explainer import BlockQRCSExplainer
 
 
 class TestCharacteristicFunctions(unittest.TestCase):
@@ -218,18 +220,35 @@ class TestExplainers(unittest.TestCase):
         self.assertEqual(len(importance), 3)
         model.predict.assert_called()
 
-    def test_cs_explainer(self):
-        """Test Coalition Structure explainer."""
-        coalition_structure = {
-            0: {1},
-            1: {0, 2},
-            2: {1}
-        }
-
-        explainer = CSExplainer(coalition_structure=coalition_structure, n_samples=10)
+    def test_random_cs_explainer(self):
+        """Test Random Compressed Sensing explainer."""
+        explainer = RandomCSExplainer(m=50, t=30, verbose=False, seed=42)
         shapley_values = explainer.fit_explain(self.G)
 
         self.assertEqual(len(shapley_values), 3)
+        for node in self.G.nodes():
+            self.assertIn(node, shapley_values)
+            self.assertIsInstance(shapley_values[node], (int, float))
+
+    def test_qrcs_explainer(self):
+        """Test QR-based Compressed Sensing explainer."""
+        explainer = QRCSExplainer(n_measurements=10, use_fast_fallback=False)
+        shapley_values = explainer.fit_explain(self.G)
+
+        self.assertEqual(len(shapley_values), 3)
+        for node in self.G.nodes():
+            self.assertIn(node, shapley_values)
+            self.assertIsInstance(shapley_values[node], (int, float))
+
+    def test_block_qrcs_explainer(self):
+        """Test Block QR-CS explainer."""
+        explainer = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
+        shapley_values = explainer.fit_explain(self.G)
+
+        self.assertEqual(len(shapley_values), 3)
+        for node in self.G.nodes():
+            self.assertIn(node, shapley_values)
+            self.assertIsInstance(shapley_values[node], (int, float))
 
     def test_explainer_from_data(self):
         """Test building graph from data in explainer."""
