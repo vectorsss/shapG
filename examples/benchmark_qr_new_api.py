@@ -365,7 +365,7 @@ if __name__ == "__main__":
     shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, results = benchmark_feature_importance(
         housing_data_reader,
         model,
-        filename='housing_benchmark_qr_new_api_new_api.png',
+        filename='housing_benchmark_with_qr.png',
         limit=10
     )
 
