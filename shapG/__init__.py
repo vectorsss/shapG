@@ -60,7 +60,7 @@ from .characteristic import (
     NodeCount,
     WeightedSum,
     CustomFunction,
-    CombinedImputation
+    CenterOfImputationSet
 )
 
 from .utils import (
@@ -112,7 +112,7 @@ __all__ = [
     'NodeCount',
     'WeightedSum',
     'CustomFunction',
-    'CombinedImputation',
+    'CenterOfImputationSet',
 
     # New API - Graph construction
     'GraphBuilder',

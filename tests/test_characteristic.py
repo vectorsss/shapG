@@ -18,7 +18,7 @@ from shapG.characteristic import (
     NodeCount,
     WeightedSum,
     CustomFunction,
-    CombinedImputation
+    CenterOfImputationSet
 )
 
 
@@ -298,8 +298,8 @@ class TestCustomFunction(unittest.TestCase):
         self.assertEqual(func({0, 1}), 10)  # 2 * 5
 
 
-class TestCombinedImputation(unittest.TestCase):
-    """Test CombinedImputation characteristic function."""
+class TestCenterOfImputationSet(unittest.TestCase):
+    """Test CenterOfImputationSet characteristic function."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -314,10 +314,10 @@ class TestCombinedImputation(unittest.TestCase):
         self.model.predict = Mock(return_value=np.array([0.5, 0.6, 0.7]))
 
     def test_initialization(self):
-        """Test CombinedImputation initialization."""
-        func = CombinedImputation(self.data, self.model)
+        """Test CenterOfImputationSet initialization."""
+        func = CenterOfImputationSet(self.data, self.model)
 
-        self.assertEqual(func.name, "CombinedImputation")
+        self.assertEqual(func.name, "CenterOfImputationSet")
         np.testing.assert_array_equal(func.data, self.data)
         self.assertEqual(func.model, self.model)
         np.testing.assert_array_equal(func.baseline, np.zeros(3))
@@ -325,13 +325,13 @@ class TestCombinedImputation(unittest.TestCase):
     def test_initialization_with_baseline(self):
         """Test initialization with custom baseline."""
         baseline = np.array([1.0, 2.0, 3.0])
-        func = CombinedImputation(self.data, self.model, baseline)
+        func = CenterOfImputationSet(self.data, self.model, baseline)
 
         np.testing.assert_array_equal(func.baseline, baseline)
 
     def test_full_coalition_no_context(self):
         """Test with full coalition (no imputation needed)."""
-        func = CombinedImputation(self.data, self.model)
+        func = CenterOfImputationSet(self.data, self.model)
 
         # Full coalition: all features present
         result = func({0, 1, 2}, context=None)
@@ -346,7 +346,7 @@ class TestCombinedImputation(unittest.TestCase):
 
     def test_partial_coalition_no_context(self):
         """Test with partial coalition (imputation needed)."""
-        func = CombinedImputation(self.data, self.model)
+        func = CenterOfImputationSet(self.data, self.model)
 
         # Partial coalition: only features 0 and 2
         result = func({0, 2}, context=None)
@@ -362,7 +362,7 @@ class TestCombinedImputation(unittest.TestCase):
 
     def test_empty_coalition_no_context(self):
         """Test with empty coalition."""
-        func = CombinedImputation(self.data, self.model)
+        func = CenterOfImputationSet(self.data, self.model)
 
         result = func(set(), context=None)
 
@@ -375,7 +375,7 @@ class TestCombinedImputation(unittest.TestCase):
 
     def test_single_sample_context(self):
         """Test with single sample context."""
-        func = CombinedImputation(self.data, self.model)
+        func = CenterOfImputationSet(self.data, self.model)
         self.model.predict.return_value = np.array([0.8])
 
         # Use sample index 1 as context
@@ -393,7 +393,7 @@ class TestCombinedImputation(unittest.TestCase):
 
     def test_non_integer_context(self):
         """Test with non-integer context (should use default behavior)."""
-        func = CombinedImputation(self.data, self.model)
+        func = CenterOfImputationSet(self.data, self.model)
 
         # Pass string context - should use default (no context) behavior
         result = func({0, 1}, context="some_string")
@@ -410,7 +410,7 @@ class TestCombinedImputation(unittest.TestCase):
     def test_custom_baseline(self):
         """Test with custom baseline values."""
         baseline = np.array([10.0, 20.0, 30.0])
-        func = CombinedImputation(self.data, self.model, baseline)
+        func = CenterOfImputationSet(self.data, self.model, baseline)
 
         result = func({0}, context=None)
 
@@ -426,7 +426,7 @@ class TestCombinedImputation(unittest.TestCase):
 
     def test_edge_case_coalitions(self):
         """Test edge cases in coalition handling."""
-        func = CombinedImputation(self.data, self.model)
+        func = CenterOfImputationSet(self.data, self.model)
 
         # Coalition with indices beyond data dimensions
         result = func({0, 5}, context=None)  # Index 5 doesn't exist
@@ -436,7 +436,7 @@ class TestCombinedImputation(unittest.TestCase):
 
     def test_model_prediction_error_handling(self):
         """Test handling of model prediction errors."""
-        func = CombinedImputation(self.data, self.model)
+        func = CenterOfImputationSet(self.data, self.model)
 
         # Make model raise an exception
         self.model.predict.side_effect = Exception("Model error")
@@ -468,7 +468,7 @@ class TestCharacteristicFunctionIntegration(unittest.TestCase):
             NodeCount(),
             WeightedSum(weights),
             CustomFunction(custom_func),
-            CombinedImputation(data, model)
+            CenterOfImputationSet(data, model)
         ]
 
         # Test basic properties

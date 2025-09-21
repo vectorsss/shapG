@@ -131,8 +131,8 @@ class CustomFunction(CharacteristicFunction):
         return self.func(coalition, context)
 
 
-class CombinedImputation(CharacteristicFunction):
-    """Characteristic function for Combined Imputation Score (CIS)."""
+class CenterOfImputationSet(CharacteristicFunction):
+    """Characteristic function for Center of Imputation Set (CIS)."""
 
     def __init__(self, data: np.ndarray, model: Any, baseline: Optional[np.ndarray] = None):
         """Initialize CIS characteristic function.
@@ -142,7 +142,7 @@ class CombinedImputation(CharacteristicFunction):
             model: Prediction model
             baseline: Baseline values for imputation
         """
-        super().__init__("CombinedImputation")
+        super().__init__("CenterOfImputationSet")
         self.data = data
         self.model = model
         self.baseline = baseline if baseline is not None else np.zeros(data.shape[1])

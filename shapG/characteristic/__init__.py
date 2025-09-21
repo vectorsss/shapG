@@ -7,7 +7,7 @@ from .characteristic_functions import (
     NodeCount,
     WeightedSum,
     CustomFunction,
-    CombinedImputation
+    CenterOfImputationSet
 )
 
 __all__ = [
@@ -15,5 +15,5 @@ __all__ = [
     'NodeCount',
     'WeightedSum',
     'CustomFunction',
-    'CombinedImputation'
+    'CenterOfImputationSet'
 ]

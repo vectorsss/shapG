@@ -8,7 +8,7 @@ import pandas as pd
 import networkx as nx
 
 from .base import GraphExplainer, CharacteristicFunction
-from ..characteristic.characteristic_functions import CoalitionDegree, CombinedImputation
+from ..characteristic.characteristic_functions import CoalitionDegree, CenterOfImputationSet
 from ..utils.graph_construction import GraphBuilder
 
 
@@ -52,7 +52,7 @@ class CISExplainer(GraphExplainer):
             self.graph = X
         elif isinstance(X, (np.ndarray, pd.DataFrame)):
             if self.model is not None:
-                self.characteristic_function = CombinedImputation(
+                self.characteristic_function = CenterOfImputationSet(
                     data=X if isinstance(X, np.ndarray) else X.values,
                     model=self.model
                 )
