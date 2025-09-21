@@ -40,6 +40,11 @@ from shapG import (
     GraphBuilder
 )
 from shapG.explainer import BlockQRCSExplainer
+try:
+    import gnuplot_style as gp
+    gp.use("all")
+except ImportError:
+    print("gnuplot_style not found, using default style")
 
 # ==============================================================================
 # QR-CS Shapley Implementation with NEW API Integration
