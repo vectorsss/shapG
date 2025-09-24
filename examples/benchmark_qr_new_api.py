@@ -284,7 +284,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
         characteristic_function=custom_char_func,
         n_blocks=n_blocks,
         parallel=True,  # Enable parallel computation
-        use_fast_fallback=True,  # Use fast mode for speed
+        use_fast_fallback=False,  # Use fast mode for speed
         verbose=True
     )
     block_qrcs_values = block_qrcs_explainer.fit_explain(G)
