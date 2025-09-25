@@ -39,7 +39,7 @@ from shapG import (
     CustomFunction,
     GraphBuilder
 )
-from shapG.explainer import BlockQRCSExplainer
+from shapG.explainer import BlockQRCSExplainer, ImprovedQRCSExplainer, ImprovedBlockQRCSExplainer
 try:
     import gnuplot_style as gp
     gp.use("all")
@@ -188,12 +188,12 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
 
     This function demonstrates:
     - Using GraphBuilder for graph construction
-    - Using different Explainer classes (ShapG, CIS, RandomCS, QR-CS, Block QR-CS)
+    - Using different Explainer classes (ShapG, CIS, RandomCS, QR-CS, Block QR-CS, Improved QR-CS)
     - Using CustomFunction for characteristic functions
     - Using the new visualization API
 
     Returns:
-        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, results)
+        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, results)
     """
     X, y = reader()
 
@@ -289,6 +289,44 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     )
     block_qrcs_values = block_qrcs_explainer.fit_explain(G)
 
+    # Compute Improved QR-CS Shapley values (with adaptive sparsity detection)
+    print("\nComputing Improved QR-CS Shapley values (adaptive)...")
+    print(f"Automatically detecting sparsity and adapting method")
+    improved_qrcs_explainer = ImprovedQRCSExplainer(
+        characteristic_function=custom_char_func,
+        n_measurements=n_measurements,
+        sparsity_threshold=0.8,  # Switch to fast mode if <80% sparse
+        auto_adapt=True,  # Automatically detect and adapt
+        verbose=True
+    )
+    improved_qrcs_values = improved_qrcs_explainer.fit_explain(G)
+
+    # Print sparsity detection results
+    sparsity_info = improved_qrcs_explainer.get_sparsity_info()
+    print(f"  Detected sparsity: {sparsity_info['detected_sparsity']*100:.1f}%")
+    print(f"  Using method: {sparsity_info['method']}")
+
+    # Compute Improved Block QR-CS Shapley values (with per-block adaptive detection)
+    print("\nComputing Improved Block QR-CS Shapley values (per-block adaptive)...")
+    print(f"Each block independently detects sparsity and adapts method")
+    improved_block_qrcs_explainer = ImprovedBlockQRCSExplainer(
+        characteristic_function=custom_char_func,
+        n_blocks=n_blocks,
+        sparsity_threshold=0.8,
+        auto_adapt=True,
+        parallel=True,
+        verbose=True
+    )
+    improved_block_qrcs_values = improved_block_qrcs_explainer.fit_explain(G)
+
+    # Print block sparsity statistics
+    block_info = improved_block_qrcs_explainer.get_block_sparsity_info()
+    if 'avg_sparsity' in block_info:
+        print(f"\nBlock sparsity statistics:")
+        print(f"  Average sparsity: {block_info['avg_sparsity']*100:.1f}%")
+        print(f"  Blocks using CS: {block_info['blocks_using_cs']}/{block_info['n_blocks']}")
+        print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
+
     # Convert to sorted feature lists for plotting
     feature_rankings = {}
 
@@ -342,6 +380,22 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
         if node_to_feature_name(node, X.columns) is not None
     ]
 
+    # Add Improved QR-CS values
+    sorted_improved_qrcs = sorted(improved_qrcs_values.items(), key=lambda x: x[1], reverse=True)
+    feature_rankings['ImprovedQRCS'] = [
+        node_to_feature_name(node, X.columns)
+        for node, _ in sorted_improved_qrcs
+        if node_to_feature_name(node, X.columns) is not None
+    ]
+
+    # Add Improved Block QR-CS values
+    sorted_improved_block_qrcs = sorted(improved_block_qrcs_values.items(), key=lambda x: x[1], reverse=True)
+    feature_rankings['ImprovedBlockQRCS'] = [
+        node_to_feature_name(node, X.columns)
+        for node, _ in sorted_improved_block_qrcs
+        if node_to_feature_name(node, X.columns) is not None
+    ]
+
     # Add model feature importances (if model is provided and trained)
     if model and hasattr(model, 'feature_importances_'):
         # Train model if not already trained
@@ -355,7 +409,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit)
 
     # Return results including all CS variants
-    return shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, results
+    return shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values, results
 
 
 if __name__ == "__main__":
@@ -367,7 +421,7 @@ if __name__ == "__main__":
     model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
 
     print("\nRunning benchmark with housing data...")
-    shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, results = benchmark_feature_importance(
+    shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values, results = benchmark_feature_importance(
         housing_data_reader,
         model,
         filename='housing_benchmark_with_qr.png',
@@ -382,3 +436,5 @@ if __name__ == "__main__":
     print("Random CS values:", random_cs_values)
     print("QR-CS values:", qrcs_values)
     print("Block QR-CS values:", block_qrcs_values)
+    print("Improved QR-CS values:", improved_qrcs_values)
+    print("Improved Block QR-CS values:", improved_block_qrcs_values)

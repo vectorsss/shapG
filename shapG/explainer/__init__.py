@@ -9,6 +9,8 @@ from .cis import CISExplainer
 from .random_cs import RandomCSExplainer
 from .qrcs import QRCSExplainer
 from .block_qrcs import BlockQRCSExplainer
+from .improved_qrcs import ImprovedQRCSExplainer
+from .improved_block_qrcs import ImprovedBlockQRCSExplainer
 
 __all__ = [
     # Base classes
@@ -21,5 +23,7 @@ __all__ = [
     'CISExplainer',
     'RandomCSExplainer',
     'QRCSExplainer',
-    'BlockQRCSExplainer'
+    'BlockQRCSExplainer',
+    'ImprovedQRCSExplainer',
+    'ImprovedBlockQRCSExplainer'
 ]
