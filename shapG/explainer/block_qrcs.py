@@ -263,7 +263,8 @@ class BlockQRCSExplainer(GraphExplainer):
     def _compute_single_block(
         self,
         block_idx: int,
-        utility_func: Callable
+        utility_func: Callable,
+        use_fast_override: Optional[bool] = None
     ) -> Dict[int, float]:
         """Compute Shapley values for a single block.
 
@@ -290,6 +291,9 @@ class BlockQRCSExplainer(GraphExplainer):
 
         shapley_values = {}
 
+        # Allow callers (e.g. subclasses) to override the fast-fallback choice per block
+        use_fast = self.use_fast_fallback if use_fast_override is None else use_fast_override
+
         for player in range(self.n):
             # Measure marginal contributions for selected coalitions in this block
             y = np.zeros(n_measurements)
@@ -304,7 +308,7 @@ class BlockQRCSExplainer(GraphExplainer):
                 y[i] = v_with - v_without
 
             # Reconstruct using compressed sensing
-            if self.use_fast_fallback:
+            if use_fast:
                 shapley_values[player] = np.mean(y) if len(y) > 0 else 0
             else:
                 try:

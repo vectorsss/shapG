@@ -25,6 +25,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
         block_sizes: Optional[List[int]] = None,
         n_measurements_per_block: Optional[List[int]] = None,
         tolerance: float = 5e-5,
+        use_fast_fallback: Optional[bool] = None,
         sparsity_threshold: float = 0.8,
         auto_adapt: bool = True,
         parallel: bool = True,
@@ -39,6 +40,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
             block_sizes: Size of each block (auto-computed if None)
             n_measurements_per_block: Measurements per block (auto-computed if None)
             tolerance: L1 optimization tolerance
+            use_fast_fallback: Force fast fallback globally (default keeps legacy behaviour)
             sparsity_threshold: Minimum sparsity ratio to use CS (default 0.8 = 80% sparse)
             auto_adapt: Automatically switch to fast fallback per block if not sparse
             parallel: If True, compute blocks in parallel
@@ -52,7 +54,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
             block_sizes=block_sizes,
             n_measurements_per_block=n_measurements_per_block,
             tolerance=tolerance,
-            use_fast_fallback=False,
+            use_fast_fallback=use_fast_fallback if use_fast_fallback is not None else False,
             parallel=parallel,
             max_workers=max_workers,
             verbose=verbose
@@ -147,17 +149,12 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
             # Use cached decision
             use_fast_for_block = (self._block_methods[block_idx] == 'Fast Fallback')
 
-        # Temporarily set the fallback mode for this block
-        original_fallback = self.use_fast_fallback
-        self.use_fast_fallback = use_fast_for_block
-
-        # Call parent implementation
-        result = super()._compute_single_block(block_idx, utility_func)
-
-        # Restore original setting
-        self.use_fast_fallback = original_fallback
-
-        return result
+        # Delegate to parent with explicit override to avoid shared-state races
+        return super()._compute_single_block(
+            block_idx,
+            utility_func,
+            use_fast_override=use_fast_for_block
+        )
 
     def get_block_sparsity_info(self) -> Dict[str, any]:
         """Get sparsity information for all blocks.
