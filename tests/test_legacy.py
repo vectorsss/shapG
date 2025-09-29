@@ -578,7 +578,7 @@ class TestLegacyBackwardCompatibility(unittest.TestCase):
             warning_messages = [str(w.message) for w in deprecation_warnings]
             self.assertTrue(any("graph_generator" in msg for msg in warning_messages))
             self.assertTrue(any("shapley_value" in msg for msg in warning_messages))
-            self.assertTrue(any("0.14.0" in msg for msg in warning_messages))
+            self.assertTrue(any("0.15.0" in msg for msg in warning_messages))
 
 
 if __name__ == '__main__':

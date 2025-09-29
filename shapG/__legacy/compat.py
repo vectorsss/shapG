@@ -31,7 +31,7 @@ def shapley_value(G: nx.Graph, f: Optional[Callable] = None, verbose: bool = Fal
         Dictionary of Shapley values for each node
     """
     warnings.warn(
-        "shapley_value() is deprecated and will be removed in version 0.14.0. "
+        "shapley_value() is deprecated and will be removed in version 0.15.0. "
         "Please use ExactExplainer instead: "
         "explainer = ExactExplainer(); shapley_values = explainer.fit_explain(G)",
         DeprecationWarning,
@@ -71,7 +71,7 @@ def shapG(
         Dictionary of approximated Shapley values for each node
     """
     warnings.warn(
-        "shapG() is deprecated and will be removed in version 0.14.0. "
+        "shapG() is deprecated and will be removed in version 0.15.0. "
         "Please use ShapGExplainer instead: "
         "explainer = ShapGExplainer(depth=depth, n_samples=m); shapley_values = explainer.fit_explain(G)",
         DeprecationWarning,
@@ -105,7 +105,7 @@ def coalition_degree(G: nx.Graph, S: Union[set, list]) -> float:
         The characteristic value of the coalition
     """
     warnings.warn(
-        "coalition_degree() is deprecated and will be removed in version 0.14.0. "
+        "coalition_degree() is deprecated and will be removed in version 0.15.0. "
         "Please use CoalitionDegree class instead: "
         "char_func = CoalitionDegree(); value = char_func(coalition, G)",
         DeprecationWarning,
@@ -126,7 +126,7 @@ def cis(G: nx.Graph, f: Optional[Callable] = None) -> Dict[int, float]:
         Dictionary of CIS-values for each node
     """
     warnings.warn(
-        "cis() is deprecated and will be removed in version 0.14.0. "
+        "cis() is deprecated and will be removed in version 0.15.0. "
         "Please use CISExplainer instead: "
         "explainer = CISExplainer(); cis_values = explainer.fit_explain(G)",
         DeprecationWarning,
@@ -170,7 +170,7 @@ def graph_generator(
         Generated NetworkX graph
     """
     warnings.warn(
-        "graph_generator() is deprecated and will be removed in version 0.14.0. "
+        "graph_generator() is deprecated and will be removed in version 0.15.0. "
         "Please use GraphBuilder instead: "
         "builder = GraphBuilder(); G = builder.random_graph(n_nodes, density)",
         DeprecationWarning,
@@ -192,7 +192,7 @@ def get_reachable_nodes_at_depth(G: nx.Graph, node: int, depth: int) -> set:
         Set of nodes that are exactly 'depth' hops away from the source node
     """
     warnings.warn(
-        "get_reachable_nodes_at_depth() is deprecated and will be removed in version 0.14.0. "
+        "get_reachable_nodes_at_depth() is deprecated and will be removed in version 0.15.0. "
         "Please use NetworkX functions directly: "
         "nx.single_source_shortest_path_length(G, node, cutoff=depth)",
         DeprecationWarning,
@@ -228,7 +228,7 @@ def plot(
         Figure and axes if show_plot is False, None otherwise
     """
     warnings.warn(
-        "plot() is deprecated and will be removed in version 0.14.0. "
+        "plot() is deprecated and will be removed in version 0.15.0. "
         "Please use FeatureImportanceVisualizer or plot_shapley_values() instead: "
         "viz = FeatureImportanceVisualizer(); viz.plot_importance(shapley_values)",
         DeprecationWarning,

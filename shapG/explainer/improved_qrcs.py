@@ -5,6 +5,11 @@ from typing import Optional, Callable, Dict
 from .qrcs import QRCSExplainer
 
 
+# Constants for adaptive sparsity detection
+DEFAULT_SPARSITY_SAMPLE_SIZE = 50  # Number of samples to check sparsity
+DEFAULT_SPARSITY_THRESHOLD = 0.01  # Threshold for considering coefficients as zero
+
+
 class ImprovedQRCSExplainer(QRCSExplainer):
     """QR-CS explainer with adaptive sparsity detection.
 
@@ -42,7 +47,7 @@ class ImprovedQRCSExplainer(QRCSExplainer):
         self.auto_adapt = auto_adapt
         self._sparsity_detected = None
 
-    def _check_sparsity(self, utility_func: Callable, sample_size: int = 50) -> float:
+    def _check_sparsity(self, utility_func: Callable, sample_size: int = DEFAULT_SPARSITY_SAMPLE_SIZE) -> float:
         """Check if marginal contributions are sparse in DCT domain.
 
         Args:
@@ -73,7 +78,7 @@ class ImprovedQRCSExplainer(QRCSExplainer):
         s_sample = Psi_sample.T @ u_sample
 
         # Count near-zero coefficients
-        threshold = 0.01 * np.max(np.abs(s_sample)) if len(s_sample) > 0 else 0.01
+        threshold = DEFAULT_SPARSITY_THRESHOLD * np.max(np.abs(s_sample)) if len(s_sample) > 0 else DEFAULT_SPARSITY_THRESHOLD
         sparsity = np.sum(np.abs(s_sample) < threshold) / len(s_sample)
 
         return sparsity

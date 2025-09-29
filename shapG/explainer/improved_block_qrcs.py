@@ -1,7 +1,7 @@
 """Improved Block QR-CS explainer with adaptive sparsity detection."""
 
 import numpy as np
-from typing import Optional, Callable, Dict, List
+from typing import Optional, Callable, Dict, List, Any
 from .block_qrcs import BlockQRCSExplainer
 
 
@@ -156,7 +156,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
             use_fast_override=use_fast_for_block
         )
 
-    def get_block_sparsity_info(self) -> Dict[str, any]:
+    def get_block_sparsity_info(self) -> Dict[str, Any]:
         """Get sparsity information for all blocks.
 
         Returns:

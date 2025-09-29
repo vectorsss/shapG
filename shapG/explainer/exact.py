@@ -15,6 +15,10 @@ from ..characteristic.characteristic_functions import CoalitionDegree
 from ..utils.graph_construction import GraphBuilder
 
 
+# Memory warning threshold
+LARGE_GRAPH_WARNING_THRESHOLD = 20  # Warn if n > 20 nodes (2^20 = 1M coalitions)
+
+
 class ExactExplainer(GraphExplainer):
     """Exact Shapley value computation using all possible coalitions."""
 
@@ -74,6 +78,16 @@ class ExactExplainer(GraphExplainer):
         nodes = list(self.graph.nodes())
         n = len(nodes)
         shapley_values = {node: 0.0 for node in nodes}
+
+        # Warn about memory requirements for large graphs
+        if n > LARGE_GRAPH_WARNING_THRESHOLD:
+            import warnings
+            warnings.warn(
+                f"Computing exact Shapley values for {n} nodes requires evaluating "
+                f"2^{n} = {2**n:,} coalitions. This may consume significant memory and time. "
+                f"Consider using an approximate method (ShapGExplainer, QRCSExplainer) for n > {LARGE_GRAPH_WARNING_THRESHOLD}.",
+                ResourceWarning
+            )
 
         fact = [factorial(i) for i in range(n + 1)]
 

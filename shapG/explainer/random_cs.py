@@ -50,13 +50,20 @@ class RandomCSExplainer(GraphExplainer):
 
         Args:
             characteristic_function: Function to compute coalition values
-            m: Number of measurements per iteration (default: 100)
-            t: Number of iterations (default: 50)
+            m: Number of measurements per iteration (default: 100, must be > 0)
+            t: Number of iterations (default: 50, must be > 0)
             tolerance: L1 optimization tolerance
             verbose: Whether to print progress
             seed: Random seed for reproducibility
         """
         super().__init__(characteristic_function or CoalitionDegree(), verbose)
+
+        # Validate inputs
+        if m <= 0:
+            raise ValueError(f"Number of measurements (m) must be positive, got {m}")
+        if t <= 0:
+            raise ValueError(f"Number of iterations (t) must be positive, got {t}")
+
         self.m = m
         self.t = t
         self.tolerance = tolerance

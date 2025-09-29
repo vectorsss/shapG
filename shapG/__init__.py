@@ -40,7 +40,7 @@ plot(shapley_values, top_n=10)
 ```
 """
 
-__version__ = '0.14.0'
+__version__ = '0.13.5'
 
 # New modular API imports
 from .explainer import (
@@ -52,7 +52,9 @@ from .explainer import (
     CISExplainer,
     RandomCSExplainer,
     QRCSExplainer,
-    BlockQRCSExplainer
+    BlockQRCSExplainer,
+    ImprovedQRCSExplainer,
+    ImprovedBlockQRCSExplainer
 )
 
 from .characteristic import (
@@ -106,6 +108,8 @@ __all__ = [
     'RandomCSExplainer',
     'QRCSExplainer',
     'BlockQRCSExplainer',
+    'ImprovedQRCSExplainer',
+    'ImprovedBlockQRCSExplainer',
 
     # New API - Characteristic functions
     'CoalitionDegree',

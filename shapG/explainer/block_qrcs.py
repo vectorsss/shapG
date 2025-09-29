@@ -59,7 +59,7 @@ class BlockQRCSExplainer(GraphExplainer):
 
         Args:
             characteristic_function: Function to compute coalition values
-            n_blocks: Number of blocks to divide the problem into
+            n_blocks: Number of blocks to divide the problem into (must be > 0)
             block_sizes: Size of each block (auto-computed if None)
             n_measurements_per_block: Measurements per block (auto-computed if None)
             tolerance: L1 optimization tolerance
@@ -69,6 +69,11 @@ class BlockQRCSExplainer(GraphExplainer):
             verbose: Whether to print progress
         """
         super().__init__(characteristic_function or CoalitionDegree(), verbose)
+
+        # Validate inputs
+        if n_blocks <= 0:
+            raise ValueError(f"Number of blocks must be positive, got {n_blocks}")
+
         self.n_blocks = n_blocks
         self.block_sizes = block_sizes
         self.n_measurements_per_block = n_measurements_per_block
@@ -322,6 +327,13 @@ class BlockQRCSExplainer(GraphExplainer):
                     shapley_values[player] = np.dot(weights[:len(u_hat)], u_hat)
 
                 except Exception as e:
+                    import warnings
+                    warnings.warn(
+                        f"Block QR-CS reconstruction failed for block {block_idx}, player {player}: {str(e)}. "
+                        f"Falling back to mean of measured contributions. "
+                        f"Consider installing cvxpy for better results: pip install cvxpy",
+                        RuntimeWarning
+                    )
                     if self.verbose:
                         print(f"    Block {block_idx}, player {player} reconstruction failed: {e}")
                     shapley_values[player] = np.mean(y) if len(y) > 0 else 0
@@ -395,8 +407,17 @@ class BlockQRCSExplainer(GraphExplainer):
                 if prob.status in ['optimal', 'optimal_inaccurate']:
                     return x.value
                 else:
+                    warnings.warn(
+                        f"CVXPY L1 minimization failed with status: {prob.status}. "
+                        f"Falling back to least squares approximation.",
+                        RuntimeWarning
+                    )
                     return np.linalg.lstsq(A, b, rcond=None)[0]
-            except Exception:
+            except Exception as e:
+                warnings.warn(
+                    f"CVXPY solver failed: {e}. Falling back to least squares approximation.",
+                    RuntimeWarning
+                )
                 try:
                     return np.linalg.lstsq(A, b, rcond=None)[0]
                 except:

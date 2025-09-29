@@ -487,30 +487,36 @@ class CoalitionManager:
         self._coalitions_cache.clear()
 
 
-# Monkey patch to support static method calls
+# Class methods for backward compatibility with static method access
+# These allow both CoalitionManager.method(graph, ...) and manager.method(graph, ...)
 _original_get_neighbors_coalition = CoalitionManager.get_neighbors_coalition
 _original_sample_coalitions = CoalitionManager.sample_coalitions
 
-def _static_get_neighbors_coalition(*args, **kwargs):
-    """Wrapper to handle both static and instance calls."""
-    if len(args) > 0 and isinstance(args[0], CoalitionManager):
-        # Instance method call: (self, graph_or_nodes, nodes, depth, include_self)
-        return _original_get_neighbors_coalition(*args, **kwargs)
-    else:
-        # Static method call: (graph, nodes, depth, include_self)
-        manager = CoalitionManager()
-        return manager.get_neighbors_coalition(*args, **kwargs)
 
-def _static_sample_coalitions(*args, **kwargs):
-    """Wrapper to handle both static and instance calls."""
-    if len(args) > 0 and isinstance(args[0], CoalitionManager):
-        # Instance method call: (self, graph_or_node, n_samples, ...)
-        return _original_sample_coalitions(*args, **kwargs)
+def _wrapped_get_neighbors_coalition(self_or_graph, *args, **kwargs):
+    """Wrapper to support both instance and static method calls."""
+    if isinstance(self_or_graph, CoalitionManager):
+        # Instance method call: self.get_neighbors_coalition(graph_or_nodes, ...)
+        return _original_get_neighbors_coalition(self_or_graph, *args, **kwargs)
     else:
-        # Static method call: (graph, n_samples, ...)
-        manager = CoalitionManager()
-        return manager.sample_coalitions(*args, **kwargs)
+        # Static method call: CoalitionManager.get_neighbors_coalition(graph, nodes, ...)
+        # Create temporary instance and call the method
+        temp_manager = CoalitionManager()
+        return _original_get_neighbors_coalition(temp_manager, self_or_graph, *args, **kwargs)
 
-# Replace methods with enhanced versions
-CoalitionManager.get_neighbors_coalition = _static_get_neighbors_coalition
-CoalitionManager.sample_coalitions = _static_sample_coalitions
+
+def _wrapped_sample_coalitions(self_or_graph, *args, **kwargs):
+    """Wrapper to support both instance and static method calls."""
+    if isinstance(self_or_graph, CoalitionManager):
+        # Instance method call: self.sample_coalitions(graph_or_node, ...)
+        return _original_sample_coalitions(self_or_graph, *args, **kwargs)
+    else:
+        # Static method call: CoalitionManager.sample_coalitions(graph, ...)
+        # Create temporary instance and call the method
+        temp_manager = CoalitionManager()
+        return _original_sample_coalitions(temp_manager, self_or_graph, *args, **kwargs)
+
+
+# Apply wrappers to support both calling patterns
+CoalitionManager.get_neighbors_coalition = _wrapped_get_neighbors_coalition
+CoalitionManager.sample_coalitions = _wrapped_sample_coalitions

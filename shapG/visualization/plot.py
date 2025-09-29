@@ -30,7 +30,7 @@ def plot(
         value_format (str, optional): Format string for displayed values. Defaults to '{:.2f}'.
     """
     warnings.warn(
-        "The plot function from shapG.visualization is deprecated and will be removed in version 0.14.0. "
+        "The plot function from shapG.visualization is deprecated and will be removed in version 0.15.0. "
         "Please use FeatureImportanceVisualizer or plot_shapley_values instead.",
         DeprecationWarning,
         stacklevel=2

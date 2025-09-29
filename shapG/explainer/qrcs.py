@@ -23,6 +23,11 @@ from ..characteristic.characteristic_functions import CoalitionDegree
 from ..utils.graph_construction import GraphBuilder
 
 
+# Constants for QR-CS algorithm
+DEFAULT_MAX_COALITIONS = 5000  # Maximum coalition size for memory safety
+DEFAULT_MAX_MEASUREMENTS = 500  # Maximum number of measurements
+
+
 class QRCSExplainer(GraphExplainer):
     """QR-CS Shapley value approximation using compressed sensing.
 
@@ -81,10 +86,20 @@ class QRCSExplainer(GraphExplainer):
         self.nodes = list(self.graph.nodes())
 
         # Initialize QR-CS components (matching original implementation)
-        self.m = min(2**(self.n - 1), 5000)  # Cap for memory
+        self.m = min(2**(self.n - 1), DEFAULT_MAX_COALITIONS)
+
+        # Warn about memory for large graphs
+        if self.n > 15 and self.m >= 1000:
+            import warnings
+            warnings.warn(
+                f"QR-CS for {self.n} nodes will use {self.m} coalitions. "
+                f"This may consume significant memory. Consider using BlockQRCSExplainer "
+                f"for better memory efficiency on large graphs.",
+                ResourceWarning
+            )
 
         if self.n_measurements is None:
-            self.l = min(int(2 * self.n * np.log(max(self.n, 2))), self.m // 2, 500)
+            self.l = min(int(2 * self.n * np.log(max(self.n, 2))), self.m // 2, DEFAULT_MAX_MEASUREMENTS)
         else:
             self.l = min(self.n_measurements, self.m)
 
@@ -242,6 +257,13 @@ class QRCSExplainer(GraphExplainer):
                     # Step 3: Compute Shapley value as weighted sum
                     shapley_values[player] = float(np.dot(self.weights[:len(u_hat)], u_hat))
                 except Exception as e:
+                    import warnings
+                    warnings.warn(
+                        f"QR-CS L1 reconstruction failed for player {player}: {str(e)}. "
+                        f"Falling back to mean of measured contributions. "
+                        f"Consider installing cvxpy for better results: pip install cvxpy",
+                        RuntimeWarning
+                    )
                     if self.verbose:
                         print(f"Warning: QR-CS reconstruction failed for player {player}, using fallback: {str(e)}")
                     # Fallback: use mean of measured contributions
@@ -265,9 +287,20 @@ class QRCSExplainer(GraphExplainer):
                 if prob.status in ['optimal', 'optimal_inaccurate']:
                     return x.value
                 else:
+                    import warnings
+                    warnings.warn(
+                        f"CVXPY L1 minimization failed with status: {prob.status}. "
+                        f"Falling back to least squares approximation.",
+                        RuntimeWarning
+                    )
                     # Fall back to least squares if CVXPY fails
                     return np.linalg.lstsq(A, b, rcond=None)[0]
             except Exception as e:
+                import warnings
+                warnings.warn(
+                    f"CVXPY solver failed: {e}. Falling back to least squares approximation.",
+                    RuntimeWarning
+                )
                 if self.verbose:
                     print(f"CVXPY solver failed: {e}, using least squares fallback")
                 try:

@@ -179,3 +179,15 @@ pyrightconfig.json
 # Test outputs
 test_outputs/
 
+# Build artifacts
+*.pkl
+*.png
+*.eps
+*.pdf
+
+# Visualization outputs
+visualizations/
+
+# MPL cache
+.mpl/
+

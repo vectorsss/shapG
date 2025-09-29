@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="shapG",
-    version="0.13.4",
+    version="0.13.5",
     packages=find_packages(),
     install_requires=[
         "networkx",
@@ -14,12 +14,19 @@ setup(
         "tqdm",
         "pandas",
         "scipy",
-        "numpy",
+        "scikit-learn",
         "tabulate"
     ],
     extras_require={
         "dev": [
-            "unittest",
+            "pytest",
+            "pytest-cov",
+            "pytest-benchmark",
+            "black",
+            "isort",
+            "flake8",
+            "mypy",
+            "pre-commit"
         ],
     },
     author="Chi Zhao",
@@ -30,12 +37,14 @@ setup(
     url="https://github.com/vectorsss/shapG",
     classifiers=[
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Operating System :: OS Independent",
         "Topic :: Scientific/Engineering :: Mathematics",
         "Topic :: Scientific/Engineering :: Information Analysis",
     ],
-    python_requires='>=3.9',
+    python_requires='>=3.8',
 )

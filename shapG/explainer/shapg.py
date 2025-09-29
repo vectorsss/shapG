@@ -57,6 +57,8 @@ class ShapGExplainer(GraphExplainer):
             raise ValueError(f"Depth must be positive, got {depth}")
         if n_samples <= 0:
             raise ValueError(f"Number of samples must be positive, got {n_samples}")
+        if cache_size <= 0:
+            raise ValueError(f"Cache size must be positive, got {cache_size}")
 
         self.depth = depth
         self.m = n_samples
