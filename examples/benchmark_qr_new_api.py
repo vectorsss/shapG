@@ -182,7 +182,7 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, 
     return results
 
 
-def benchmark_feature_importance(reader, model, filename=None, limit=10):
+def benchmark_feature_importance(reader, model, filename=None, limit=10, test_improved_graphs=True):
     """
     Benchmark feature importance using NEW modular API.
 
@@ -191,6 +191,13 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
     - Using different Explainer classes (ShapG, CIS, RandomCS, QR-CS, Block QR-CS, Improved QR-CS)
     - Using CustomFunction for characteristic functions
     - Using the new visualization API
+
+    Parameters:
+    - reader: Function to read the dataset
+    - model: Machine learning model
+    - filename: Output filename for plot
+    - limit: Number of top features to consider
+    - test_improved_graphs: If True, also test improved graph construction methods
 
     Returns:
         tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, results)
@@ -405,11 +412,60 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10):
         feature_indices = np.argsort(importances)[::-1]
         feature_rankings['Model'] = [X.columns[i] for i in feature_indices]
 
+    # Test improved graph construction methods if requested
+    improved_shapley_values = {}
+    if test_improved_graphs:
+        print("\n" + "="*60)
+        print("Testing improved graph construction methods...")
+        print("="*60)
+
+        # Test different density ratios for from_rank_deletion
+        density_ratios = [None]  # None uses default 1.5x minimum
+
+        for density in density_ratios:
+            density_label = f"{density}" if density is not None else "auto"
+            print(f"\nBuilding improved graph with density={density_label}...")
+
+            for rank_method in ['cosine', 'kendalltau', 'mutual_info']:
+                G_improved = builder.from_rank_deletion(
+                    X, y,
+                    density_ratio=density,
+                    correlation_method=rank_method,
+                    similarity_method=rank_method
+                )
+                print(f"Improved graph has {G_improved.number_of_nodes()} nodes and {G_improved.number_of_edges()} edges")
+
+                # Compute ShapG with improved graph
+                print(f"Computing ShapG with improved graph (density={density_label})...")
+                shapg_improved = ShapGExplainer(
+                    characteristic_function=custom_char_func,
+                    depth=1,
+                    n_samples=3,
+                    approximate_by_ratio=False,
+                    scale=False,
+                    verbose=False
+                )
+                improved_values = shapg_improved.fit_explain(G_improved)
+
+                # Add to feature rankings
+                sorted_improved = sorted(improved_values.items(), key=lambda x: x[1], reverse=True)
+                method_name = f'Improved ShapG-{rank_method}-{density_label}'
+                feature_rankings[method_name] = [
+                    node_to_feature_name(node, X.columns)
+                    for node, _ in sorted_improved
+                    if node_to_feature_name(node, X.columns) is not None
+                ]
+                improved_shapley_values[method_name] = improved_values
+
+                print(f"  Completed improved graph benchmark (density={density_label})")
+
     # Plot comparison using the original plotting function
     results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit)
 
-    # Return results including all CS variants
-    return shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values, results
+    # Return results including all CS variants and improved graphs
+    return (shapley_values, cis_values, random_cs_values, qrcs_values,
+            block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
+            improved_shapley_values, results)
 
 
 if __name__ == "__main__":
@@ -421,11 +477,14 @@ if __name__ == "__main__":
     model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
 
     print("\nRunning benchmark with housing data...")
-    shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values, results = benchmark_feature_importance(
+    (shapley_values, cis_values, random_cs_values, qrcs_values,
+     block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
+     improved_shapley_values, results) = benchmark_feature_importance(
         housing_data_reader,
         model,
         filename='housing_benchmark_with_qr.png',
-        limit=10
+        limit=10,
+        test_improved_graphs=True
     )
 
     print("\n" + "=" * 60)
@@ -438,3 +497,7 @@ if __name__ == "__main__":
     print("Block QR-CS values:", block_qrcs_values)
     print("Improved QR-CS values:", improved_qrcs_values)
     print("Improved Block QR-CS values:", improved_block_qrcs_values)
+    if improved_shapley_values:
+        print("\nImproved graph Shapley values:")
+        for method, values in improved_shapley_values.items():
+            print(f"  {method}:", values)

@@ -424,6 +424,205 @@ class TestGraphBuilder(unittest.TestCase):
         G2 = GraphBuilder.random_graph(n_nodes=5, density=0.5, seed=123)
         self.assertIsInstance(G2, nx.Graph)
 
+    def test_from_rank_deletion_basic(self):
+        """Test basic from_rank_deletion functionality."""
+        X = np.random.randn(100, 5)
+        y = np.random.randn(100)
+
+        G = self.builder.from_rank_deletion(X, y)
+
+        self.assertIsInstance(G, nx.Graph)
+        self.assertEqual(G.number_of_nodes(), 5)
+        self.assertGreater(G.number_of_edges(), 0)
+
+        # Check connectivity
+        self.assertTrue(nx.is_connected(G))
+
+        # Check metadata
+        self.assertIn('actual_density_ratio', G.graph)
+
+    def test_from_rank_deletion_with_dataframe(self):
+        """Test from_rank_deletion with DataFrame input."""
+        X = pd.DataFrame(np.random.randn(100, 4), columns=['A', 'B', 'C', 'D'])
+        y = np.random.randn(100)
+
+        G = GraphBuilder.from_rank_deletion(X, y)
+
+        self.assertIsInstance(G, nx.Graph)
+        self.assertEqual(set(G.nodes()), {'A', 'B', 'C', 'D'})
+        self.assertTrue(nx.is_connected(G))
+
+    def test_from_rank_deletion_density_ratio(self):
+        """Test from_rank_deletion with different density ratios."""
+        X = np.random.randn(80, 6)
+        y = np.random.randn(80)
+
+        # Test different density ratios
+        G1 = GraphBuilder.from_rank_deletion(X, y, density_ratio=0.3)
+        G2 = GraphBuilder.from_rank_deletion(X, y, density_ratio=0.6)
+
+        # Higher density should have more edges
+        self.assertLessEqual(G1.number_of_edges(), G2.number_of_edges())
+
+        # Both should be connected
+        self.assertTrue(nx.is_connected(G1))
+        self.assertTrue(nx.is_connected(G2))
+
+    def test_from_rank_deletion_default_density(self):
+        """Test from_rank_deletion with default density (None)."""
+        X = np.random.randn(50, 5)
+        y = np.random.randn(50)
+
+        G = GraphBuilder.from_rank_deletion(X, y, density_ratio=None)
+
+        self.assertIsInstance(G, nx.Graph)
+        self.assertTrue(nx.is_connected(G))
+
+        # Should use 1.5x minimum ratio
+        n_nodes = G.number_of_nodes()
+        min_edges = n_nodes - 1
+        self.assertGreaterEqual(G.number_of_edges(), min_edges)
+
+    def test_from_rank_deletion_methods(self):
+        """Test from_rank_deletion with different correlation methods."""
+        X = np.random.randn(60, 4)
+        y = np.random.randn(60)
+
+        methods = ['cosine', 'pearsonr', 'kendalltau', 'spearmanr', 'mutual_info']
+
+        for method in methods:
+            G = GraphBuilder.from_rank_deletion(
+                X, y,
+                correlation_method=method,
+                similarity_method=method
+            )
+
+            self.assertIsInstance(G, nx.Graph)
+            self.assertEqual(G.number_of_nodes(), 4)
+            self.assertTrue(nx.is_connected(G))
+
+    def test_from_rank_deletion_feature_ranges(self):
+        """Test from_rank_deletion with feature type ranges."""
+        X = np.random.randn(50, 6)
+        y = np.random.randn(50)
+
+        # Define feature ranges: 3 numerical, 2 categorical, 1 binary
+        feature_ranges = {
+            'num': (0, 3),
+            'cat': (3, 5),
+            'bin': (5, 6)
+        }
+
+        G = GraphBuilder.from_rank_deletion(
+            X, y,
+            feature_ranges=feature_ranges,
+            enforce_cross_type_edges=True
+        )
+
+        self.assertIsInstance(G, nx.Graph)
+        self.assertEqual(G.number_of_nodes(), 6)
+        self.assertTrue(nx.is_connected(G))
+
+    def test_from_rank_deletion_edge_weights(self):
+        """Test that from_rank_deletion creates weighted edges."""
+        X = np.random.randn(50, 4)
+        y = np.random.randn(50)
+
+        G = GraphBuilder.from_rank_deletion(X, y)
+
+        # Check that edges have weights
+        for u, v in G.edges():
+            self.assertIn('weight', G[u][v])
+            self.assertIsInstance(G[u][v]['weight'], (int, float, np.number))
+            self.assertGreaterEqual(G[u][v]['weight'], 0)
+
+    def test_from_rank_deletion_small_graph(self):
+        """Test from_rank_deletion with small graphs."""
+        # Test with 3 nodes
+        X = np.random.randn(30, 3)
+        y = np.random.randn(30)
+
+        G = GraphBuilder.from_rank_deletion(X, y)
+
+        self.assertEqual(G.number_of_nodes(), 3)
+        self.assertGreaterEqual(G.number_of_edges(), 2)  # At least minimum for connectivity
+        self.assertTrue(nx.is_connected(G))
+
+    def test_from_rank_deletion_reproducibility(self):
+        """Test from_rank_deletion reproducibility."""
+        np.random.seed(42)
+        X = np.random.randn(50, 4)
+        y = np.random.randn(50)
+
+        G1 = GraphBuilder.from_rank_deletion(X, y, density_ratio=0.4)
+        G2 = GraphBuilder.from_rank_deletion(X, y, density_ratio=0.4)
+
+        # Should produce same graph structure
+        self.assertEqual(G1.number_of_nodes(), G2.number_of_nodes())
+        self.assertEqual(G1.number_of_edges(), G2.number_of_edges())
+        self.assertEqual(set(G1.edges()), set(G2.edges()))
+
+    def test_get_feature_rank(self):
+        """Test _get_feature_rank helper method."""
+        X = np.random.randn(50, 4)
+        y = np.random.randn(50)
+
+        # Test different ranking methods
+        for method in ['cosine', 'pearsonr', 'mutual_info']:
+            rank = GraphBuilder._get_feature_rank(X, y, method)
+
+            self.assertIsInstance(rank, list)
+            self.assertEqual(len(rank), 4)
+            self.assertEqual(set(rank), {0, 1, 2, 3})
+
+    def test_calculate_similarity_matrix(self):
+        """Test _calculate_similarity_matrix helper method."""
+        X = np.random.randn(50, 4)
+
+        # Test different similarity methods
+        for method in ['cosine', 'pearsonr', 'mutual_info']:
+            sim_matrix = GraphBuilder._calculate_similarity_matrix(X, method)
+
+            self.assertEqual(sim_matrix.shape, (4, 4))
+            # Should be symmetric
+            np.testing.assert_array_almost_equal(sim_matrix, sim_matrix.T)
+            # Values should be reasonable
+            self.assertTrue(np.all(sim_matrix >= -1))
+            self.assertTrue(np.all(sim_matrix <= 1))
+
+    def test_get_feature_type(self):
+        """Test _get_feature_type helper method."""
+        feature_ranges = {
+            'num': (0, 3),
+            'cat': (3, 5),
+            'bin': (5, 6)
+        }
+
+        self.assertEqual(GraphBuilder._get_feature_type(0, feature_ranges), 'num')
+        self.assertEqual(GraphBuilder._get_feature_type(2, feature_ranges), 'num')
+        self.assertEqual(GraphBuilder._get_feature_type(3, feature_ranges), 'cat')
+        self.assertEqual(GraphBuilder._get_feature_type(4, feature_ranges), 'cat')
+        self.assertEqual(GraphBuilder._get_feature_type(5, feature_ranges), 'bin')
+        self.assertEqual(GraphBuilder._get_feature_type(6, feature_ranges), 'unknown')
+
+    def test_is_cross_type_edge(self):
+        """Test _is_cross_type_edge helper method."""
+        feature_ranges = {
+            'num': (0, 2),
+            'cat': (2, 4)
+        }
+
+        # Numerical to categorical should be cross-type
+        self.assertTrue(GraphBuilder._is_cross_type_edge(0, 2, feature_ranges, True))
+        self.assertTrue(GraphBuilder._is_cross_type_edge(1, 3, feature_ranges, True))
+
+        # Same type should not be cross-type
+        self.assertFalse(GraphBuilder._is_cross_type_edge(0, 1, feature_ranges, True))
+        self.assertFalse(GraphBuilder._is_cross_type_edge(2, 3, feature_ranges, True))
+
+        # Should return False if not enforcing
+        self.assertFalse(GraphBuilder._is_cross_type_edge(0, 2, feature_ranges, False))
+
 
 class TestCoalitionManager(unittest.TestCase):
     """Test CoalitionManager class."""
@@ -588,13 +787,15 @@ class TestUtilsIntegration(unittest.TestCase):
     def test_graph_builder_methods_consistency(self):
         """Test that different GraphBuilder methods produce valid graphs."""
         data = pd.DataFrame(np.random.randn(30, 4), columns=['A', 'B', 'C', 'D'])
+        y = np.random.randn(30)
         builder = GraphBuilder()
 
         methods = [
             lambda: builder.from_correlation(data, threshold=0.3),
             lambda: builder.from_mutual_information(data, threshold=0.1),
             lambda: builder.from_kendalltau_minimal_edge(data),
-            lambda: builder.from_matrix_generator(data)
+            lambda: builder.from_matrix_generator(data),
+            lambda: builder.from_rank_deletion(data, y)
         ]
 
         for method in methods:

@@ -7,7 +7,9 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from sklearn.feature_selection import mutual_info_regression
-from scipy.spatial.distance import squareform, pdist
+from scipy.spatial.distance import squareform, pdist, cosine
+from scipy.stats import pearsonr, kendalltau, spearmanr
+from loguru import logger
 
 
 class GraphBuilder:
@@ -258,6 +260,331 @@ class GraphBuilder:
             G.add_edge(i, j, weight=weight)
 
         return G
+
+    @staticmethod
+    def from_rank_deletion(
+        X: Union[np.ndarray, pd.DataFrame],
+        y: np.ndarray,
+        density_ratio: Optional[float] = None,
+        correlation_method: str = 'cosine',
+        similarity_method: str = 'cosine',
+        feature_ranges: Optional[Dict[str, Tuple[int, int]]] = None,
+        use_mixed_similarity: bool = False,
+        use_target_aware: bool = False,
+        enforce_cross_type_edges: bool = False
+    ) -> nx.Graph:
+        """Construct graph by selectively removing edges based on feature ranking.
+
+        This method creates a complete graph, ranks features by their correlation with
+        the target, and removes edges following the ranking while maintaining connectivity.
+
+        Args:
+            X: Feature matrix (n_samples, n_features)
+            y: Target values
+            density_ratio: Target edge density ratio (0 to 1). If None, uses 1.5x minimum ratio
+            correlation_method: Method for feature ranking ('pearsonr', 'kendalltau',
+                              'spearmanr', 'cosine', 'mutual_info')
+            similarity_method: Method for edge weight calculation (same options as correlation_method)
+            feature_ranges: Dict with 'num', 'cat', 'bin' keys for feature type ranges
+                          Example: {'num': (0, 5), 'cat': (5, 8), 'bin': (8, 10)}
+            use_mixed_similarity: If True, use appropriate similarity for each feature type
+            use_target_aware: If True, use target-aware similarity for binary classification
+            enforce_cross_type_edges: If True, always keep edges between different feature types
+
+        Returns:
+            NetworkX graph with weighted edges
+        """
+        # Handle input types
+        if isinstance(X, pd.DataFrame):
+            features = X.columns.tolist()
+            X_array = X.to_numpy()
+        else:
+            n_features = X.shape[1]
+            features = list(range(n_features))
+            X_array = X
+
+        n_features = len(features)
+
+        # Use target-aware similarity for binary classification
+        if use_target_aware and len(np.unique(y)) == 2:
+            from sklearn.feature_selection import mutual_info_classif
+
+            # Get feature importance using mutual information with target
+            mi_scores = mutual_info_classif(X_array, y.ravel() if y.ndim > 1 else y)
+            feature_rank_indices = np.argsort(mi_scores)[::-1]
+            feature_rank = [features[i] for i in feature_rank_indices]
+
+            # Calculate similarity based on how similarly features predict the target
+            similarity_matrix = np.zeros((n_features, n_features))
+
+            for i in range(n_features):
+                for j in range(i + 1, n_features):
+                    sim = 0
+                    for class_val in np.unique(y):
+                        mask = (y == class_val).ravel() if y.ndim > 1 else (y == class_val)
+                        if np.sum(mask) > 1:
+                            X_class = X_array[mask]
+                            try:
+                                if feature_ranges and use_mixed_similarity:
+                                    # Determine feature types
+                                    type_i = GraphBuilder._get_feature_type(i, feature_ranges)
+                                    type_j = GraphBuilder._get_feature_type(j, feature_ranges)
+
+                                    if type_i == 'num' and type_j == 'num':
+                                        corr, _ = pearsonr(X_class[:, i], X_class[:, j])
+                                        sim += abs(corr) * (np.sum(mask) / len(y))
+                                    else:
+                                        # For categorical/binary, use normalized mutual information
+                                        from sklearn.metrics import normalized_mutual_info_score
+                                        sim += normalized_mutual_info_score(
+                                            X_class[:, i], X_class[:, j]
+                                        ) * (np.sum(mask) / len(y))
+                                else:
+                                    corr, _ = pearsonr(X_class[:, i], X_class[:, j])
+                                    sim += abs(corr) * (np.sum(mask) / len(y))
+                            except:
+                                sim += 0
+
+                    similarity_matrix[i, j] = sim
+                    similarity_matrix[j, i] = sim
+
+        # Use mixed similarity if requested
+        elif use_mixed_similarity:
+            from .feature_similarity import (
+                calculate_mixed_similarity_matrix,
+                get_feature_ranking_mixed,
+            )
+
+            # Get feature ranking using mixed methods
+            feature_rank_indices = get_feature_ranking_mixed(
+                X, y, feature_ranges=feature_ranges
+            )
+            feature_rank = [features[i] for i in feature_rank_indices]
+
+            # Calculate similarity matrix using mixed methods
+            similarity_matrix, _ = calculate_mixed_similarity_matrix(
+                X, feature_ranges=feature_ranges
+            )
+        else:
+            # Get feature ranking
+            feature_rank_indices = GraphBuilder._get_feature_rank(
+                X, y, correlation_method
+            )
+            feature_rank = [features[i] for i in feature_rank_indices]
+
+            # Calculate similarity matrix for edge weights
+            similarity_matrix = GraphBuilder._calculate_similarity_matrix(
+                X_array, similarity_method
+            )
+
+        # Create initial complete graph
+        G = nx.Graph()
+        edges = []
+        cross_type_edges = set()
+
+        for i in range(n_features):
+            for j in range(i + 1, n_features):
+                weight = similarity_matrix[i, j]
+                edges.append((features[i], features[j], weight))
+                # Track cross-type edges
+                if GraphBuilder._is_cross_type_edge(i, j, feature_ranges, enforce_cross_type_edges):
+                    cross_type_edges.add((features[i], features[j]))
+                    cross_type_edges.add((features[j], features[i]))
+
+        # Sort edges by weight (descending)
+        edges.sort(key=lambda x: x[2], reverse=True)
+        G.add_weighted_edges_from(edges)
+
+        # Check initial connectivity
+        if not nx.is_connected(G):
+            raise ValueError("Initial graph is not connected")
+
+        # Calculate target number of edges
+        max_edges = (n_features * (n_features - 1)) // 2
+
+        # If density_ratio not specified, use 1.5x minimum ratio as default
+        if density_ratio is None:
+            min_ratio = (n_features - 1) / max_edges if max_edges > 0 else 0.3
+            density_ratio = min(1.5 * min_ratio, 0.3)
+            logger.info(
+                f"No density ratio specified. Using {density_ratio:.3f} (1.5x minimum ratio)"
+            )
+
+        target_edges = int(density_ratio * max_edges)
+
+        # If enforcing cross-type edges, count them separately
+        num_cross_type_edges = len(cross_type_edges) // 2 if enforce_cross_type_edges else 0
+        if num_cross_type_edges > 0:
+            logger.info(
+                f"Enforcing {num_cross_type_edges} cross-type edges between numerical and categorical/binary features"
+            )
+            target_edges = max(
+                target_edges,
+                num_cross_type_edges + min(n_features - 1, target_edges // 2),
+            )
+
+        # Minimum edges for connectivity
+        min_edges = n_features - 1
+        min_ratio = min_edges / max_edges if max_edges > 0 else 1.0
+
+        # Auto-adjust if density ratio is too small
+        actual_density_ratio = density_ratio
+        if target_edges < min_edges:
+            actual_density_ratio = min(1.5 * min_ratio, 1.0)
+            target_edges = int(actual_density_ratio * max_edges)
+            target_edges = max(target_edges, min_edges)
+            logger.info(
+                f"Density ratio {density_ratio} is too small (minimum: {min_ratio:.3f}). "
+                f"Auto-adjusting to {actual_density_ratio:.3f}"
+            )
+
+        # Remove edges following feature rank while maintaining connectivity
+        for node in feature_rank:
+            if G.number_of_edges() <= target_edges:
+                break
+
+            # Get edges of current node sorted by weight (descending)
+            node_edges = [(u, v) for u, v in G.edges(node)]
+            node_edges.sort(key=lambda x: G[x[0]][x[1]]['weight'], reverse=True)
+
+            for edge in node_edges:
+                if G.number_of_edges() <= target_edges:
+                    break
+
+                # Skip cross-type edges if enforcing
+                if enforce_cross_type_edges and (
+                    edge in cross_type_edges or (edge[1], edge[0]) in cross_type_edges
+                ):
+                    continue
+
+                # Try removing edge
+                weight = G[edge[0]][edge[1]]['weight']
+                G.remove_edge(*edge)
+
+                # Check connectivity
+                if nx.is_connected(G):
+                    continue
+                else:
+                    # Restore edge to maintain connectivity
+                    G.add_edge(*edge, weight=weight)
+
+        # Add metadata about the actual density used
+        G.graph['actual_density_ratio'] = actual_density_ratio
+
+        return G
+
+    @staticmethod
+    def _get_feature_type(idx: int, feature_ranges: Optional[Dict[str, Tuple[int, int]]]) -> str:
+        """Determine feature type from feature ranges."""
+        if feature_ranges:
+            if 'num' in feature_ranges and feature_ranges['num'][0] <= idx < feature_ranges['num'][1]:
+                return 'num'
+            elif 'cat' in feature_ranges and feature_ranges['cat'][0] <= idx < feature_ranges['cat'][1]:
+                return 'cat'
+            elif 'bin' in feature_ranges and feature_ranges['bin'][0] <= idx < feature_ranges['bin'][1]:
+                return 'bin'
+        return 'unknown'
+
+    @staticmethod
+    def _is_cross_type_edge(
+        i: int,
+        j: int,
+        feature_ranges: Optional[Dict[str, Tuple[int, int]]],
+        enforce_cross_type_edges: bool
+    ) -> bool:
+        """Check if edge is cross-type (between numerical and categorical/binary)."""
+        if not enforce_cross_type_edges or not feature_ranges:
+            return False
+        type_i = GraphBuilder._get_feature_type(i, feature_ranges)
+        type_j = GraphBuilder._get_feature_type(j, feature_ranges)
+        return (type_i == 'num' and type_j in ['cat', 'bin']) or \
+               (type_j == 'num' and type_i in ['cat', 'bin'])
+
+    @staticmethod
+    def _get_feature_rank(
+        X: Union[np.ndarray, pd.DataFrame],
+        y: np.ndarray,
+        method: str = 'cosine'
+    ) -> List[int]:
+        """Get feature ranking based on correlation with target."""
+        method_map = {
+            'pearsonr': pearsonr,
+            'kendalltau': kendalltau,
+            'spearmanr': spearmanr,
+            'cosine': lambda x, y: 1 - cosine(x, y),
+            'mutual_info': None,
+        }
+
+        if method not in method_map:
+            raise ValueError(f"Method {method} not supported")
+
+        # Handle mutual information separately
+        if method == 'mutual_info':
+            from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+
+            is_classification = len(np.unique(y)) < 10
+
+            if isinstance(X, pd.DataFrame):
+                X_array = X.to_numpy()
+            else:
+                X_array = X
+
+            if is_classification:
+                mi_scores = mutual_info_classif(X_array, y.ravel() if y.ndim > 1 else y)
+            else:
+                mi_scores = mutual_info_regression(X_array, y.ravel() if y.ndim > 1 else y)
+
+            return np.argsort(mi_scores)[::-1].tolist()
+
+        correlation_func = method_map[method]
+        use_pvalue = method in ['pearsonr', 'kendalltau', 'spearmanr']
+
+        values = {}
+        if isinstance(X, pd.DataFrame):
+            for col in X.columns:
+                if use_pvalue:
+                    values[col] = correlation_func(X[col], y)[1]
+                else:
+                    result = correlation_func(X[col], y)
+                    values[col] = result if np.isscalar(result) else result[0]
+            values_rank = sorted(values, key=values.get, reverse=use_pvalue)
+            return [X.columns.get_loc(col) for col in values_rank]
+        else:
+            n_features = X.shape[1]
+            for i in range(n_features):
+                if use_pvalue:
+                    values[i] = correlation_func(X[:, i], y)[1]
+                else:
+                    result = correlation_func(X[:, i], y)
+                    values[i] = result if np.isscalar(result) else result[0]
+            return sorted(values, key=values.get, reverse=use_pvalue)
+
+    @staticmethod
+    def _calculate_similarity_matrix(X_array: np.ndarray, method: str = 'cosine') -> np.ndarray:
+        """Calculate similarity matrix between features."""
+        n_features = X_array.shape[1]
+        similarity_matrix = np.zeros((n_features, n_features))
+
+        if method == 'mutual_info':
+            from sklearn.metrics import normalized_mutual_info_score
+            for i in range(n_features):
+                for j in range(i + 1, n_features):
+                    nmi = normalized_mutual_info_score(X_array[:, i], X_array[:, j])
+                    similarity_matrix[i, j] = nmi
+                    similarity_matrix[j, i] = nmi
+        else:
+            for i in range(n_features):
+                for j in range(i + 1, n_features):
+                    if method in ['pearsonr', 'kendalltau', 'spearmanr']:
+                        corr, _ = eval(method)(X_array[:, i], X_array[:, j])
+                        similarity_matrix[i, j] = abs(corr)
+                        similarity_matrix[j, i] = abs(corr)
+                    elif method == 'cosine':
+                        sim = 1 - cosine(X_array[:, i], X_array[:, j])
+                        similarity_matrix[i, j] = abs(sim)
+                        similarity_matrix[j, i] = abs(sim)
+
+        return similarity_matrix
 
 
 class CoalitionManager:
