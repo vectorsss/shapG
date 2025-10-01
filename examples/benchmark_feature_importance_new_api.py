@@ -173,7 +173,6 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, 
 
     if filename:
         plt.savefig(filename, dpi=300)
-    plt.show()
 
     return results
 
