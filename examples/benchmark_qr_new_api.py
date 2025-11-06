@@ -14,6 +14,7 @@ import os
 import sys
 import pickle
 import math
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -72,33 +73,35 @@ def h1n1_data_reader(filename='./data/process_data.csv'):
 # Benchmark functions using NEW API
 # ==============================================================================
 
-def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, limit=10):
+def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, limit=10, cached_kpi_results=None):
     """
     Plot comparison using new API structure.
     Same functionality as before but cleaner implementation.
+
+    Parameters:
+    - cached_kpi_results: Pre-computed KPI results to avoid recalculation
     """
-    # Define model specific parameters
-    random_states = {
-        lgb.LGBMClassifier: [10, 10],
-        lgb.LGBMRegressor: [42, 42]
-    }
-    test_sizes = {
-        lgb.LGBMClassifier: [0.2, 0.2],
-        lgb.LGBMRegressor: [0.2, 0.3]
-    }
-    random_state = random_states.get(type(model), [42, 42])
-    test_size = test_sizes.get(type(model), [0.2, 0.2])
-
-    # Generate results file name
+    # Get model name (needed for plot title regardless of cache status)
     model_name = type(model).__name__
-    results_file = f"{model_name}_new_api_results.pkl"
 
-    # Load or calculate results
-    if os.path.exists(results_file):
-        with open(results_file, 'rb') as f:
-            results = pickle.load(f)
-        print(f"Loaded results for {model_name} (new API) from disk.")
+    # If cached results provided, use them directly
+    if cached_kpi_results is not None:
+        results = cached_kpi_results
+        print(f"Using cached KPI results.")
     else:
+        # Define model specific parameters
+        random_states = {
+            lgb.LGBMClassifier: [10, 10],
+            lgb.LGBMRegressor: [42, 42]
+        }
+        test_sizes = {
+            lgb.LGBMClassifier: [0.2, 0.2],
+            lgb.LGBMRegressor: [0.2, 0.3]
+        }
+        random_state = random_states.get(type(model), [42, 42])
+        test_size = test_sizes.get(type(model), [0.2, 0.2])
+
+        print(f"Computing KPI results (no cache)...")
         X, y = reader()
         results = {}
 
@@ -148,11 +151,6 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, 
                 'Slope': np.dot(deltas, weight) if deltas else 0
             }
 
-        # Save results
-        with open(results_file, 'wb') as f:
-            pickle.dump(results, f)
-        print(f"Saved results for {model_name} (new API) to disk.")
-
     # Create plot (matching original benchmark)
     plt.figure(figsize=(12, 8))
     metric_name = "$R^2$" if isinstance(model, lgb.LGBMRegressor) else "Accuracy"
@@ -182,7 +180,45 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename=None, 
     return results
 
 
-def benchmark_feature_importance(reader, model, filename=None, limit=10, test_improved_graphs=True):
+def plot_time_comparison(time_results, filename=None):
+    """
+    Plot time comparison for all algorithms.
+
+    Parameters:
+    - time_results: Dictionary mapping algorithm names to execution times in seconds
+    - filename: Output filename for the plot
+    """
+    # Sort by time for better visualization
+    sorted_items = sorted(time_results.items(), key=lambda x: x[1])
+    algorithms = [item[0] for item in sorted_items]
+    times = [item[1] for item in sorted_items]
+
+    # Create horizontal bar chart
+    plt.figure(figsize=(12, 8))
+    colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(algorithms)))
+    bars = plt.barh(algorithms, times, color=colors, alpha=0.7, edgecolor='black')
+
+    # Add value labels on bars
+    for i, (bar, time_val) in enumerate(zip(bars, times)):
+        plt.text(time_val, i, f' {time_val:.2f}s',
+                va='center', ha='left', fontweight='bold', fontsize=10)
+
+    plt.xlabel('Execution Time (seconds)', fontsize=12, fontweight='bold')
+    plt.ylabel('Algorithm', fontsize=12, fontweight='bold')
+    plt.title('Algorithm Execution Time Comparison', fontsize=14, fontweight='bold')
+    plt.grid(axis='x', alpha=0.3, linestyle='--')
+    plt.tight_layout()
+
+    if filename:
+        base, ext = os.path.splitext(filename)
+        time_filename = f"{base}_time_comparison{ext}"
+        plt.savefig(time_filename, dpi=300, bbox_inches='tight')
+        print(f"\nSaved time comparison plot to {time_filename}")
+
+    return sorted_items
+
+
+def benchmark_feature_importance(reader, model, filename=None, limit=10, test_improved_graphs=True, use_cache=True):
     """
     Benchmark feature importance using NEW modular API.
 
@@ -198,14 +234,48 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
     - filename: Output filename for plot
     - limit: Number of top features to consider
     - test_improved_graphs: If True, also test improved graph construction methods
+    - use_cache: If True, load cached results if available and save new results
 
     Returns:
-        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, results)
+        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, time_results, results)
     """
     X, y = reader()
 
-    # Build graph to match original benchmark
-    print("Building graph to match original benchmark...")
+    # Generate cache filename based on dataset
+    dataset_name = reader.__name__.replace('_data_reader', '')
+    cache_file = f"{dataset_name}_shapley_cache.pkl"
+
+    # Try to load cached results
+    if use_cache and os.path.exists(cache_file):
+        print(f"\n" + "=" * 60)
+        print(f"Loading all cached results from {cache_file}...")
+        print("=" * 60)
+        with open(cache_file, 'rb') as f:
+            cached_data = pickle.load(f)
+
+        shapley_values = cached_data['shapley_values']
+        cis_values = cached_data['cis_values']
+        random_cs_values = cached_data['random_cs_values']
+        qrcs_values = cached_data['qrcs_values']
+        block_qrcs_values = cached_data['block_qrcs_values']
+        improved_qrcs_values = cached_data['improved_qrcs_values']
+        improved_block_qrcs_values = cached_data['improved_block_qrcs_values']
+        improved_shapley_values = cached_data.get('improved_shapley_values', {})
+        time_results = cached_data['time_results']
+        cached_kpi_results = cached_data.get('kpi_results', None)
+
+        print(f"Successfully loaded cached results!")
+        print(f"  - Shapley methods: {len(time_results)}")
+        print(f"  - KPI results: {'Yes' if cached_kpi_results else 'No'}")
+        print(f"  - Example time (ShapG): {time_results.get('ShapG', 0):.2f}s")
+    else:
+        # Dictionary to store execution times
+        time_results = {}
+        improved_shapley_values = {}
+        cached_kpi_results = None
+
+    # Build graph to match original benchmark (always needed for feature rankings)
+    print("\nBuilding graph to match original benchmark...")
     builder = GraphBuilder()
 
     # Use the new API method that exactly matches the original
@@ -214,125 +284,154 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
 
     print(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
 
-    # Define custom characteristic function for classification KPI
-    def classification_kpi_wrapper(coalition: Set[int], context: nx.Graph) -> float:
-        """Wrapper to work with new API signature."""
-        if len(coalition) == 0:
-            return 0
+    # Only compute Shapley values if not cached
+    if not (use_cache and os.path.exists(cache_file)):
+        print("\n" + "=" * 60)
+        print("Computing all Shapley values (no cache found)...")
+        print("=" * 60)
 
-        # Coalition contains column names (strings) from graph nodes
-        cols = list(coalition)
+        # Define custom characteristic function for classification KPI
+        def characteristic_function_wrapper(coalition: Set[int], context: nx.Graph) -> float:
+            """Wrapper to work with new API signature."""
+            if len(coalition) == 0:
+                return 0
 
-        # Select columns by name directly since graph nodes are column names
-        X_subset = X[cols]
+            # Coalition contains column names (strings) from graph nodes
+            cols = list(coalition)
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_subset, y, test_size=0.2, random_state=42
+            # Select columns by name directly since graph nodes are column names
+            X_subset = X[cols]
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X_subset, y, test_size=0.2, random_state=42
+            )
+            lgb_model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='cpu')
+            lgb_model.fit(X_train, y_train)
+            y_pred = lgb_model.predict(X_test)
+            return r2_score(y_test, y_pred)
+
+        # Create custom characteristic function
+        custom_char_func = CustomFunction(characteristic_function_wrapper, name="Regression R2")
+
+        # NEW API: Use ShapGExplainer
+        print("\nComputing Shapley values using ShapGExplainer...")
+        start_time = time.time()
+        shapg_explainer = ShapGExplainer(
+            characteristic_function=custom_char_func,
+            depth=1,
+            n_samples=3,  # equivalent to m=3 in old API
+            approximate_by_ratio=False,
+            scale=False,
+            verbose=True
         )
-        lgb_model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='cpu')
-        lgb_model.fit(X_train, y_train)
-        y_pred = lgb_model.predict(X_test)
-        return r2_score(y_test, y_pred)
+        shapley_values = shapg_explainer.fit_explain(G)
+        time_results['ShapG'] = time.time() - start_time
+        print(f"  Time: {time_results['ShapG']:.2f}s")
 
-    # Create custom characteristic function
-    custom_char_func = CustomFunction(classification_kpi_wrapper, name="ClassificationKPI")
+        # Compute CIS values using NEW API
+        print("\nComputing CIS values...")
+        start_time = time.time()
+        cis_explainer = CISExplainer(
+            characteristic_function=custom_char_func,
+            verbose=False
+        )
+        cis_values = cis_explainer.fit_explain(G)
+        time_results['CIS'] = time.time() - start_time
+        print(f"  Time: {time_results['CIS']:.2f}s")
 
-    # NEW API: Use ShapGExplainer
-    print("\nComputing Shapley values using ShapGExplainer...")
-    shapg_explainer = ShapGExplainer(
-        characteristic_function=custom_char_func,
-        depth=1,
-        n_samples=3,  # equivalent to m=3 in old API
-        approximate_by_ratio=False,
-        scale=False,
-        verbose=True
-    )
-    shapley_values = shapg_explainer.fit_explain(G)
+        # Compute Random CS Shapley values using NEW API
+        # RandomCSExplainer uses random Bernoulli matrices and iterative sampling
+        # to approximate Shapley values using compressed sensing
+        print("\nComputing Random CS Shapley values...")
+        start_time = time.time()
+        random_cs_explainer = RandomCSExplainer(
+            characteristic_function=custom_char_func,
+            m=50,  # Number of measurements per iteration
+            t=30,  # Number of iterations
+            verbose=True,
+            seed=42  # For reproducibility
+        )
+        random_cs_values = random_cs_explainer.fit_explain(G)
+        time_results['RandomCS'] = time.time() - start_time
+        print(f"  Time: {time_results['RandomCS']:.2f}s")
 
-    # Compute CIS values using NEW API
-    print("\nComputing CIS values...")
-    cis_explainer = CISExplainer(
-        characteristic_function=custom_char_func,
-        verbose=False
-    )
-    cis_values = cis_explainer.fit_explain(G)
+        # Compute QR-CS Shapley values
+        print("\nComputing QR-CS Shapley values...")
+        print(f"Using CVXPY for L1 minimization (much faster than scipy)")
+        start_time = time.time()
+        n_measurements = min(100, 2**(len(X.columns)-1) // 4)
+        qrcs_explainer = QRCSExplainer(
+            characteristic_function=custom_char_func,
+            n_measurements=n_measurements,
+            use_fast_fallback=False,  # Now this should be fast with CVXPY
+            verbose=True
+        )
+        qrcs_values = qrcs_explainer.fit_explain(G)
+        time_results['QR-CS'] = time.time() - start_time
+        print(f"  Time: {time_results['QR-CS']:.2f}s")
 
-    # Compute Random CS Shapley values using NEW API
-    # RandomCSExplainer uses random Bernoulli matrices and iterative sampling
-    # to approximate Shapley values using compressed sensing
-    print("\nComputing Random CS Shapley values...")
-    random_cs_explainer = RandomCSExplainer(
-        characteristic_function=custom_char_func,
-        m=50,  # Number of measurements per iteration
-        t=30,  # Number of iterations
-        verbose=True,
-        seed=42  # For reproducibility
-    )
-    random_cs_values = random_cs_explainer.fit_explain(G)
+        # Compute Block QR-CS Shapley values
+        print("\nComputing Block QR-CS Shapley values...")
+        print(f"Using parallel block computation for scalability")
+        start_time = time.time()
+        # Use fewer blocks for small problems, more for larger ones
+        n_blocks = min(3, max(2, len(X.columns) // 5))
+        block_qrcs_explainer = BlockQRCSExplainer(
+            characteristic_function=custom_char_func,
+            n_blocks=n_blocks,
+            parallel=False,  # Enable parallel computation
+            use_fast_fallback=False,  # Use fast mode for speed
+            verbose=True
+        )
+        block_qrcs_values = block_qrcs_explainer.fit_explain(G)
+        time_results['BlockQRCS'] = time.time() - start_time
+        print(f"  Time: {time_results['BlockQRCS']:.2f}s")
 
-    # Compute QR-CS Shapley values
-    print("\nComputing QR-CS Shapley values...")
-    print(f"Using CVXPY for L1 minimization (much faster than scipy)")
-    n_measurements = min(100, 2**(len(X.columns)-1) // 4)
-    qrcs_explainer = QRCSExplainer(
-        characteristic_function=custom_char_func,
-        n_measurements=n_measurements,
-        use_fast_fallback=True,  # Now this should be fast with CVXPY
-        verbose=True
-    )
-    qrcs_values = qrcs_explainer.fit_explain(G)
+        # Compute Improved QR-CS Shapley values (with adaptive sparsity detection)
+        print("\nComputing Improved QR-CS Shapley values (adaptive)...")
+        print(f"Automatically detecting sparsity and adapting method")
+        start_time = time.time()
+        improved_qrcs_explainer = ImprovedQRCSExplainer(
+            characteristic_function=custom_char_func,
+            n_measurements=n_measurements,
+            sparsity_threshold=0.8,  # Switch to fast mode if <80% sparse
+            auto_adapt=True,  # Automatically detect and adapt
+            verbose=True
+        )
+        improved_qrcs_values = improved_qrcs_explainer.fit_explain(G)
+        time_results['ImprovedQRCS'] = time.time() - start_time
 
-    # Compute Block QR-CS Shapley values
-    print("\nComputing Block QR-CS Shapley values...")
-    print(f"Using parallel block computation for scalability")
-    # Use fewer blocks for small problems, more for larger ones
-    n_blocks = min(3, max(2, len(X.columns) // 5))
-    block_qrcs_explainer = BlockQRCSExplainer(
-        characteristic_function=custom_char_func,
-        n_blocks=n_blocks,
-        parallel=False,  # Enable parallel computation
-        use_fast_fallback=True,  # Use fast mode for speed
-        verbose=True
-    )
-    block_qrcs_values = block_qrcs_explainer.fit_explain(G)
+        # Print sparsity detection results
+        sparsity_info = improved_qrcs_explainer.get_sparsity_info()
+        print(f"  Detected sparsity: {sparsity_info['detected_sparsity']*100:.1f}%")
+        print(f"  Using method: {sparsity_info['method']}")
+        print(f"  Time: {time_results['ImprovedQRCS']:.2f}s")
 
-    # Compute Improved QR-CS Shapley values (with adaptive sparsity detection)
-    print("\nComputing Improved QR-CS Shapley values (adaptive)...")
-    print(f"Automatically detecting sparsity and adapting method")
-    improved_qrcs_explainer = ImprovedQRCSExplainer(
-        characteristic_function=custom_char_func,
-        n_measurements=n_measurements,
-        sparsity_threshold=0.8,  # Switch to fast mode if <80% sparse
-        auto_adapt=True,  # Automatically detect and adapt
-        verbose=True
-    )
-    improved_qrcs_values = improved_qrcs_explainer.fit_explain(G)
+        # Compute Improved Block QR-CS Shapley values (with per-block adaptive detection)
+        print("\nComputing Improved Block QR-CS Shapley values (per-block adaptive)...")
+        print(f"Each block independently detects sparsity and adapts method")
+        start_time = time.time()
+        improved_block_qrcs_explainer = ImprovedBlockQRCSExplainer(
+            characteristic_function=custom_char_func,
+            n_blocks=n_blocks,
+            sparsity_threshold=0.8,
+            auto_adapt=True,
+            parallel=True,
+            verbose=True
+        )
+        improved_block_qrcs_values = improved_block_qrcs_explainer.fit_explain(G)
+        time_results['ImprovedBlockQRCS'] = time.time() - start_time
 
-    # Print sparsity detection results
-    sparsity_info = improved_qrcs_explainer.get_sparsity_info()
-    print(f"  Detected sparsity: {sparsity_info['detected_sparsity']*100:.1f}%")
-    print(f"  Using method: {sparsity_info['method']}")
+        # Print block sparsity statistics
+        block_info = improved_block_qrcs_explainer.get_block_sparsity_info()
+        if 'avg_sparsity' in block_info:
+            print(f"\nBlock sparsity statistics:")
+            print(f"  Average sparsity: {block_info['avg_sparsity']*100:.1f}%")
+            print(f"  Blocks using CS: {block_info['blocks_using_cs']}/{block_info['n_blocks']}")
+            print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
+        print(f"  Time: {time_results['ImprovedBlockQRCS']:.2f}s")
 
-    # Compute Improved Block QR-CS Shapley values (with per-block adaptive detection)
-    print("\nComputing Improved Block QR-CS Shapley values (per-block adaptive)...")
-    print(f"Each block independently detects sparsity and adapts method")
-    improved_block_qrcs_explainer = ImprovedBlockQRCSExplainer(
-        characteristic_function=custom_char_func,
-        n_blocks=n_blocks,
-        sparsity_threshold=0.8,
-        auto_adapt=True,
-        parallel=True,
-        verbose=True
-    )
-    improved_block_qrcs_values = improved_block_qrcs_explainer.fit_explain(G)
-
-    # Print block sparsity statistics
-    block_info = improved_block_qrcs_explainer.get_block_sparsity_info()
-    if 'avg_sparsity' in block_info:
-        print(f"\nBlock sparsity statistics:")
-        print(f"  Average sparsity: {block_info['avg_sparsity']*100:.1f}%")
-        print(f"  Blocks using CS: {block_info['blocks_using_cs']}/{block_info['n_blocks']}")
-        print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
+        # Note: KPI results will be saved after they are computed below
 
     # Convert to sorted feature lists for plotting
     feature_rankings = {}
@@ -437,6 +536,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
 
                 # Compute ShapG with improved graph
                 print(f"Computing ShapG with improved graph (density={density_label})...")
+                start_time = time.time()
                 shapg_improved = ShapGExplainer(
                     characteristic_function=custom_char_func,
                     depth=1,
@@ -446,6 +546,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
                     verbose=False
                 )
                 improved_values = shapg_improved.fit_explain(G_improved)
+                elapsed_time = time.time() - start_time
 
                 # Add to feature rankings
                 sorted_improved = sorted(improved_values.items(), key=lambda x: x[1], reverse=True)
@@ -456,16 +557,45 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
                     if node_to_feature_name(node, X.columns) is not None
                 ]
                 improved_shapley_values[method_name] = improved_values
+                time_results[method_name] = elapsed_time
 
-                print(f"  Completed improved graph benchmark (density={density_label})")
+                print(f"  Completed improved graph benchmark (density={density_label}, time={elapsed_time:.2f}s)")
 
-    # Plot comparison using the original plotting function
-    results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit)
+    # Plot comparison using the original plotting function (pass cached KPI results if available)
+    results = plot_KPI_comparison_by_dict(reader, feature_rankings, model, filename, limit, cached_kpi_results)
 
-    # Return results including all CS variants and improved graphs
+    # Save all results to unified cache if we computed anything new
+    if use_cache and (cached_kpi_results is None or not os.path.exists(cache_file)):
+        print("\n" + "=" * 60)
+        print("Saving all results to unified cache...")
+        print("=" * 60)
+        cache_data = {
+            'shapley_values': shapley_values,
+            'cis_values': cis_values,
+            'random_cs_values': random_cs_values,
+            'qrcs_values': qrcs_values,
+            'block_qrcs_values': block_qrcs_values,
+            'improved_qrcs_values': improved_qrcs_values,
+            'improved_block_qrcs_values': improved_block_qrcs_values,
+            'improved_shapley_values': improved_shapley_values,
+            'time_results': time_results,
+            'kpi_results': results  # Add KPI results to cache
+        }
+        with open(cache_file, 'wb') as f:
+            pickle.dump(cache_data, f)
+        print(f"Saved all results (Shapley values, timing, and KPI) to {cache_file}")
+
+    # Print time summary
+    print("\n" + "=" * 60)
+    print("Execution Time Summary:")
+    print("=" * 60)
+    for method, exec_time in sorted(time_results.items(), key=lambda x: x[1]):
+        print(f"  {method}: {exec_time:.2f}s")
+
+    # Return results including all CS variants, improved graphs, and timing information
     return (shapley_values, cis_values, random_cs_values, qrcs_values,
             block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-            improved_shapley_values, results)
+            improved_shapley_values, time_results, results)
 
 
 if __name__ == "__main__":
@@ -479,7 +609,7 @@ if __name__ == "__main__":
     print("\nRunning benchmark with housing data...")
     (shapley_values, cis_values, random_cs_values, qrcs_values,
      block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-     improved_shapley_values, results) = benchmark_feature_importance(
+     improved_shapley_values, time_results, results) = benchmark_feature_importance(
         housing_data_reader,
         model,
         filename='housing_benchmark_with_qr.png',
@@ -501,3 +631,10 @@ if __name__ == "__main__":
         print("\nImproved graph Shapley values:")
         for method, values in improved_shapley_values.items():
             print(f"  {method}:", values)
+
+    # Generate time comparison plot
+    print("\n" + "=" * 60)
+    print("Generating time comparison visualization...")
+    print("=" * 60)
+    plot_time_comparison(time_results, filename='housing_benchmark_with_qr.png')
+    print("\nBenchmark complete!")
