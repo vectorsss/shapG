@@ -11,6 +11,7 @@ from .qrcs import QRCSExplainer
 from .block_qrcs import BlockQRCSExplainer
 from .improved_qrcs import ImprovedQRCSExplainer
 from .improved_block_qrcs import ImprovedBlockQRCSExplainer
+from .leverage_shap import LeverageScoreExplainer
 
 __all__ = [
     # Base classes
@@ -25,5 +26,6 @@ __all__ = [
     'QRCSExplainer',
     'BlockQRCSExplainer',
     'ImprovedQRCSExplainer',
-    'ImprovedBlockQRCSExplainer'
+    'ImprovedBlockQRCSExplainer',
+    'LeverageScoreExplainer'
 ]

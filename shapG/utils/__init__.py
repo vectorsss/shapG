@@ -15,6 +15,11 @@ from .graph_helpers import (
     get_reachable_nodes_at_depth,
     coalition_degree
 )
+from .feature_similarity import (
+    cramers_v,
+    calculate_mixed_similarity_matrix,
+    get_feature_ranking_mixed
+)
 
 __all__ = [
     # Utilities
@@ -29,5 +34,9 @@ __all__ = [
     # Graph helpers
     'graph_generator',
     'get_reachable_nodes_at_depth',
-    'coalition_degree'
+    'coalition_degree',
+    # Feature similarity
+    'cramers_v',
+    'calculate_mixed_similarity_matrix',
+    'get_feature_ranking_mixed'
 ]

@@ -43,7 +43,8 @@ dependencies = [
     "matplotlib>=3.4",
     "tqdm>=4.62",
     "scikit-learn>=1.0",
-    "tabulate>=0.8"
+    "tabulate>=0.8",
+    "loguru>=0.6"
 ]
 
 [project.optional-dependencies]
@@ -70,8 +71,13 @@ docs = [
     "nbsphinx>=0.8"
 ]
 
+examples = [
+    "lightgbm>=3.3",
+    "seaborn>=0.11"
+]
+
 all = [
-    "shapG[dev,performance,docs]"
+    "shapG[dev,performance,docs,examples]"
 ]
 
 [project.urls]

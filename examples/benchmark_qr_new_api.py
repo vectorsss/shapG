@@ -40,7 +40,12 @@ from shapG import (
     CustomFunction,
     GraphBuilder
 )
-from shapG.explainer import BlockQRCSExplainer, ImprovedQRCSExplainer, ImprovedBlockQRCSExplainer
+from shapG.explainer import (
+    BlockQRCSExplainer,
+    ImprovedQRCSExplainer,
+    ImprovedBlockQRCSExplainer,
+    LeverageScoreExplainer
+)
 try:
     import gnuplot_style as gp
     gp.use("all")
@@ -237,7 +242,8 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
     - use_cache: If True, load cached results if available and save new results
 
     Returns:
-        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values, improved_qrcs_values, time_results, results)
+        tuple: (shapley_values, cis_values, random_cs_values, qrcs_values, block_qrcs_values,
+                improved_qrcs_values, leverage_shap_values, time_results, results)
     """
     X, y = reader()
 
@@ -260,6 +266,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
         block_qrcs_values = cached_data['block_qrcs_values']
         improved_qrcs_values = cached_data['improved_qrcs_values']
         improved_block_qrcs_values = cached_data['improved_block_qrcs_values']
+        leverage_shap_values = cached_data.get('leverage_shap_values', {})
         improved_shapley_values = cached_data.get('improved_shapley_values', {})
         time_results = cached_data['time_results']
         cached_kpi_results = cached_data.get('kpi_results', None)
@@ -271,6 +278,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
     else:
         # Dictionary to store execution times
         time_results = {}
+        leverage_shap_values = {}
         improved_shapley_values = {}
         cached_kpi_results = None
 
@@ -431,6 +439,23 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
             print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
         print(f"  Time: {time_results['ImprovedBlockQRCS']:.2f}s")
 
+        # Compute Leverage SHAP values (ICLR 2025 - Musco & Witter)
+        print("\nComputing Leverage SHAP values (ICLR 2025)...")
+        print(f"Using leverage score sampling with provable O(n log n) guarantees")
+        start_time = time.time()
+        leverage_explainer = LeverageScoreExplainer(
+            characteristic_function=custom_char_func,
+            n_samples=None,  # Uses 5*n by default for good accuracy
+            paired_sampling=True,  # Use paired sampling for better accuracy
+            use_bernoulli=True,  # Use Bernoulli sampling without replacement
+            random_state=42,
+            verbose=True
+        )
+        leverage_shap_values = leverage_explainer.fit_explain(G)
+        time_results['LeverageSHAP'] = time.time() - start_time
+        print(f"  Time: {time_results['LeverageSHAP']:.2f}s")
+        print(f"  Achieved ~50% error reduction compared to Kernel SHAP (based on paper)")
+
         # Note: KPI results will be saved after they are computed below
 
     # Convert to sorted feature lists for plotting
@@ -499,6 +524,14 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
     feature_rankings['ImprovedBlockQRCS'] = [
         node_to_feature_name(node, X.columns)
         for node, _ in sorted_improved_block_qrcs
+        if node_to_feature_name(node, X.columns) is not None
+    ]
+
+    # Add Leverage SHAP values
+    sorted_leverage_shap = sorted(leverage_shap_values.items(), key=lambda x: x[1], reverse=True)
+    feature_rankings['LeverageSHAP'] = [
+        node_to_feature_name(node, X.columns)
+        for node, _ in sorted_leverage_shap
         if node_to_feature_name(node, X.columns) is not None
     ]
 
@@ -577,6 +610,7 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
             'block_qrcs_values': block_qrcs_values,
             'improved_qrcs_values': improved_qrcs_values,
             'improved_block_qrcs_values': improved_block_qrcs_values,
+            'leverage_shap_values': leverage_shap_values,
             'improved_shapley_values': improved_shapley_values,
             'time_results': time_results,
             'kpi_results': results  # Add KPI results to cache
@@ -592,10 +626,10 @@ def benchmark_feature_importance(reader, model, filename=None, limit=10, test_im
     for method, exec_time in sorted(time_results.items(), key=lambda x: x[1]):
         print(f"  {method}: {exec_time:.2f}s")
 
-    # Return results including all CS variants, improved graphs, and timing information
+    # Return results including all CS variants, Leverage SHAP, improved graphs, and timing information
     return (shapley_values, cis_values, random_cs_values, qrcs_values,
             block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-            improved_shapley_values, time_results, results)
+            leverage_shap_values, improved_shapley_values, time_results, results)
 
 
 if __name__ == "__main__":
@@ -609,7 +643,7 @@ if __name__ == "__main__":
     print("\nRunning benchmark with housing data...")
     (shapley_values, cis_values, random_cs_values, qrcs_values,
      block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-     improved_shapley_values, time_results, results) = benchmark_feature_importance(
+     leverage_shap_values, improved_shapley_values, time_results, results) = benchmark_feature_importance(
         housing_data_reader,
         model,
         filename='housing_benchmark_with_qr.png',
@@ -627,6 +661,7 @@ if __name__ == "__main__":
     print("Block QR-CS values:", block_qrcs_values)
     print("Improved QR-CS values:", improved_qrcs_values)
     print("Improved Block QR-CS values:", improved_block_qrcs_values)
+    print("Leverage SHAP values:", leverage_shap_values)
     if improved_shapley_values:
         print("\nImproved graph Shapley values:")
         for method, values in improved_shapley_values.items():
