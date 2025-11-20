@@ -205,11 +205,17 @@ class QRCSExplainer(GraphExplainer):
         coalition = set()
         available_players = [i for i in range(self.n) if i != player]
 
+        # Convert idx to Python int to use arbitrary precision arithmetic
+        # This avoids overflow for large coalition indices (> 2^31)
+        idx = int(idx)
+
         if idx >= 2**(self.n - 1):
             idx = idx % 2**(self.n - 1)
 
+        # Use Python's arbitrary precision integers to avoid overflow
         for i, p in enumerate(available_players):
-            if idx & (1 << i):
+            # Bit shift with Python int (arbitrary precision)
+            if idx & (1 << int(i)):
                 coalition.add(p)
 
         return coalition

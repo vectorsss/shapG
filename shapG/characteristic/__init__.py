@@ -10,10 +10,19 @@ from .characteristic_functions import (
     CenterOfImputationSet
 )
 
+from .model_based import (
+    ModelBasedCharacteristic,
+    GraphModelCharacteristic,
+    EnsembleMaskingCharacteristic
+)
+
 __all__ = [
     'CoalitionDegree',
     'NodeCount',
     'WeightedSum',
     'CustomFunction',
-    'CenterOfImputationSet'
+    'CenterOfImputationSet',
+    'ModelBasedCharacteristic',
+    'GraphModelCharacteristic',
+    'EnsembleMaskingCharacteristic'
 ]
