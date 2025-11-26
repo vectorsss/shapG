@@ -52,6 +52,7 @@ from shapG import (
     CISExplainer,
     RandomCSExplainer,
     QRCSExplainer,
+    MultilinearExplainer,
     CustomFunction,
     GraphBuilder
 )
@@ -115,6 +116,13 @@ LEVERAGE_SHAP_CONFIG = {
 IMPROVED_QRCS_CONFIG = {
     'sparsity_threshold': 0.8,
     'auto_adapt': True,
+}
+
+MULTILINEAR_CONFIG = {
+    'depth': 1,
+    'max_exact_size': 10,
+    'n_quadrature': 21,      # Quadrature points for integration (odd number preferred)
+    'n_samples': 100,        # Samples per quadrature point for partial derivative estimation
 }
 
 # Plotting configuration
@@ -361,18 +369,12 @@ def _save_plot(base_filename, output_dir=None):
 
     saved_files = {}
 
-    # Save PNG
-    png_path = output_dir / f"{base_filename}.png"
-    plt.savefig(png_path, dpi=PLOT_DPI, bbox_inches='tight')
-    saved_files['png'] = str(png_path)
-
     # Save PDF
     pdf_path = output_dir / f"{base_filename}.pdf"
     plt.savefig(pdf_path, bbox_inches='tight')
     saved_files['pdf'] = str(pdf_path)
 
     print(f"Saved plots:")
-    print(f"  PNG: {png_path}")
     print(f"  PDF: {pdf_path}")
 
     return saved_files
@@ -908,6 +910,24 @@ def _compute_all_explainers(G, custom_char_func, X):
     print(f"  Time: {time_results['LeverageSHAP']:.2f}s")
     print("  Achieved ~50% error reduction compared to Kernel SHAP (based on paper)")
 
+    # 9. Multilinear Extension (Owen 1972)
+    print("\nComputing Multilinear Extension Shapley values...")
+    print("Using Owen's multilinear extension theory for local neighborhoods")
+    start_time = time.time()
+    multilinear_explainer = MultilinearExplainer(
+        characteristic_function=custom_char_func,
+        verbose=True,
+        **MULTILINEAR_CONFIG
+    )
+    all_values['multilinear'] = multilinear_explainer.fit_explain(G, mode='local')
+    time_results['Multilinear'] = time.time() - start_time
+
+    # Get computation statistics
+    ml_stats = multilinear_explainer.get_computation_stats()
+    print(f"  Methods used: {ml_stats['method_counts']}")
+    print(f"  Avg time per node: {ml_stats['avg_time_per_node']:.3f}s")
+    print(f"  Time: {time_results['Multilinear']:.2f}s")
+
     return all_values, time_results
 
 
@@ -930,6 +950,7 @@ def _convert_to_feature_rankings(all_values, X, model, y):
         'ImprovedQRCS': 'improved_qrcs',
         'ImprovedBlockQRCS': 'improved_block_qrcs',
         'LeverageSHAP': 'leverage_shap',
+        'Multilinear': 'multilinear',
     }
 
     for display_name, key in methods_mapping.items():
