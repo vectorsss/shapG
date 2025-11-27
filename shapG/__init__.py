@@ -55,6 +55,7 @@ from .explainer import (
     BlockQRCSExplainer,
     ImprovedQRCSExplainer,
     ImprovedBlockQRCSExplainer,
+    LeverageScoreExplainer,
     MultilinearExplainer
 )
 
@@ -111,6 +112,7 @@ __all__ = [
     'BlockQRCSExplainer',
     'ImprovedQRCSExplainer',
     'ImprovedBlockQRCSExplainer',
+    'LeverageScoreExplainer',
     'MultilinearExplainer',
 
     # New API - Characteristic functions

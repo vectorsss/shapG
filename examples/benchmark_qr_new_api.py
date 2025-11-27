@@ -119,7 +119,6 @@ IMPROVED_QRCS_CONFIG = {
 }
 
 MULTILINEAR_CONFIG = {
-    'depth': 1,
     'max_exact_size': 10,
     'n_quadrature': 21,      # Quadrature points for integration (odd number preferred)
     'n_samples': 100,        # Samples per quadrature point for partial derivative estimation
@@ -912,20 +911,19 @@ def _compute_all_explainers(G, custom_char_func, X):
 
     # 9. Multilinear Extension (Owen 1972)
     print("\nComputing Multilinear Extension Shapley values...")
-    print("Using Owen's multilinear extension theory for local neighborhoods")
+    print("Using Owen's multilinear extension theory (no graph structure)")
     start_time = time.time()
     multilinear_explainer = MultilinearExplainer(
         characteristic_function=custom_char_func,
         verbose=True,
         **MULTILINEAR_CONFIG
     )
-    all_values['multilinear'] = multilinear_explainer.fit_explain(G, mode='local')
+    all_values['multilinear'] = multilinear_explainer.fit_explain(G)
     time_results['Multilinear'] = time.time() - start_time
 
     # Get computation statistics
     ml_stats = multilinear_explainer.get_computation_stats()
-    print(f"  Methods used: {ml_stats['method_counts']}")
-    print(f"  Avg time per node: {ml_stats['avg_time_per_node']:.3f}s")
+    print(f"  Method used: {ml_stats.get('method_used', 'N/A')}")
     print(f"  Time: {time_results['Multilinear']:.2f}s")
 
     return all_values, time_results

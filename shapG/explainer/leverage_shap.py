@@ -10,6 +10,9 @@ Key features:
 - Leverage score sampling for efficient subset selection
 - Paired sampling for balanced feature representation
 - Bernoulli sampling without replacement
+
+Note: This explainer does NOT use graph structure. It computes Shapley values
+for all n players based purely on the characteristic function.
 """
 
 from typing import Dict, Set, Union, Optional, Tuple
@@ -17,21 +20,21 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from scipy.special import comb
-from scipy.optimize import lsq_linear
 import warnings
 
-from .base import GraphExplainer, CharacteristicFunction
-from ..characteristic.characteristic_functions import CoalitionDegree
-from ..utils.graph_construction import GraphBuilder
+from .base import Explainer, CharacteristicFunction
 
 
-class LeverageScoreExplainer(GraphExplainer):
+class LeverageScoreExplainer(Explainer):
     """
     Leverage SHAP explainer for computing Shapley values with theoretical guarantees.
 
     This implementation provides provably accurate Shapley value estimates with just
     O(n log n) model evaluations, achieving ~50% reduction in error compared to
     Kernel SHAP on average.
+
+    Note: This explainer does not use graph structure. It computes Shapley values
+    for all n players based purely on the characteristic function.
 
     Parameters
     ----------
@@ -66,7 +69,7 @@ class LeverageScoreExplainer(GraphExplainer):
         random_state: Optional[int] = None,
         verbose: bool = False
     ):
-        super().__init__(characteristic_function or CoalitionDegree(), verbose)
+        super().__init__(characteristic_function, verbose)
         self.n_samples = n_samples
         self.paired_sampling = paired_sampling
         self.use_bernoulli = use_bernoulli
@@ -75,6 +78,7 @@ class LeverageScoreExplainer(GraphExplainer):
         # To be set during fitting
         self.shapley_values_ = None
         self.n_features_ = None
+        self.feature_names_ = None
         self._v_empty = None
         self._v_full = None
 
@@ -82,25 +86,32 @@ class LeverageScoreExplainer(GraphExplainer):
             np.random.seed(random_state)
 
     def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'LeverageScoreExplainer':
-        """Fit the explainer to data.
+        """
+        Fit the explainer to data.
 
         Args:
-            X: Input data (array, dataframe, or graph)
-            **kwargs: Additional arguments
+            X: Input data - can be:
+               - numpy array or DataFrame: uses number of columns as n_features
+               - networkx Graph: uses number of nodes as n_features
 
         Returns:
             Self for method chaining
         """
         if isinstance(X, nx.Graph):
-            self.graph = X
-        elif isinstance(X, (np.ndarray, pd.DataFrame)):
-            builder = GraphBuilder()
-            self.graph = builder.from_correlation(X, **kwargs)
+            self.n_features_ = X.number_of_nodes()
+            self.feature_names_ = list(X.nodes())
+            self._context = X
+        elif isinstance(X, pd.DataFrame):
+            self.n_features_ = X.shape[1]
+            self.feature_names_ = list(X.columns)
+            self._context = X
+        elif isinstance(X, np.ndarray):
+            self.n_features_ = X.shape[1] if X.ndim > 1 else X.shape[0]
+            self.feature_names_ = list(range(self.n_features_))
+            self._context = X
         else:
             raise ValueError(f"Unsupported input type: {type(X)}")
 
-        self.n_features_ = self.graph.number_of_nodes()
-        self.nodes = list(self.graph.nodes())
         n = self.n_features_
 
         # Determine number of samples
@@ -116,21 +127,21 @@ class LeverageScoreExplainer(GraphExplainer):
 
         return self
 
-    def explain(self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs) -> Dict[int, float]:
-        """Compute Shapley values.
+    def explain(self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs) -> Dict:
+        """
+        Compute Shapley values.
 
         Args:
             X: Optional input data (uses fitted data if None)
-            **kwargs: Additional arguments
 
         Returns:
-            Dictionary mapping feature indices to Shapley values
+            Dictionary mapping feature names/indices to Shapley values
         """
         if not self._fitted:
             raise ValueError("Must call fit() before explain()")
 
-        # Return Shapley values as dictionary mapping nodes to values
-        return dict(zip(self.nodes, self.shapley_values_))
+        # Return Shapley values as dictionary mapping feature names to values
+        return dict(zip(self.feature_names_, self.shapley_values_))
 
     def _compute_shapley_values(self, m: int) -> np.ndarray:
         """
@@ -150,10 +161,10 @@ class LeverageScoreExplainer(GraphExplainer):
 
         # Step 1: Compute boundary values v(∅) and v([n])
         empty_coalition = set()
-        full_coalition = set(self.nodes)
+        full_coalition = set(self.feature_names_)
 
-        self._v_empty = self.characteristic_function(empty_coalition, self.graph)
-        self._v_full = self.characteristic_function(full_coalition, self.graph)
+        self._v_empty = self.characteristic_function(empty_coalition, self._context)
+        self._v_full = self.characteristic_function(full_coalition, self._context)
 
         if self.verbose:
             print(f"v(∅) = {self._v_empty:.4f}, v([n]) = {self._v_full:.4f}")
@@ -192,9 +203,9 @@ class LeverageScoreExplainer(GraphExplainer):
         """
         values = np.zeros(len(Z))
         for i, coalition_vec in enumerate(Z):
-            # Convert binary vector to set of node indices
-            coalition = {self.nodes[j] for j in range(len(coalition_vec)) if coalition_vec[j] == 1}
-            values[i] = self.characteristic_function(coalition, self.graph)
+            # Convert binary vector to set of feature names
+            coalition = {self.feature_names_[j] for j in range(len(coalition_vec)) if coalition_vec[j] == 1}
+            values[i] = self.characteristic_function(coalition, self._context)
         return values
 
     def _compute_leverage_score(self, subset_size: int, n: int) -> float:
@@ -492,8 +503,6 @@ class LeverageScoreExplainer(GraphExplainer):
         np.ndarray
             Shapley values
         """
-        m = len(Z)
-
         # Adjust target: b = y - (v([n]) - v(∅))/n * Z @ 1
         v_diff = self._v_full - self._v_empty
         b = y - (v_diff / n) * Z.sum(axis=1)
