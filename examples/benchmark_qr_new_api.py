@@ -10,6 +10,7 @@ Methods compared:
 - BlockQRCSExplainer: Block QR-CS for high-dimensional problems with parallel computation
 - ImprovedQRCSExplainer: Adaptive QR-CS with automatic sparsity detection
 - ImprovedBlockQRCSExplainer: Per-block adaptive detection
+- RPQRCSExplainer: Random Projection QRCS with stratified sampling (fixes coalition bias)
 - LeverageScoreExplainer: Leverage score sampling (ICLR 2025)
 """
 
@@ -60,6 +61,7 @@ from shapG.explainer import (
     BlockQRCSExplainer,
     ImprovedQRCSExplainer,
     ImprovedBlockQRCSExplainer,
+    RPQRCSExplainer,
     LeverageScoreExplainer
 )
 from shapG.characteristic import GraphModelCharacteristic
@@ -118,10 +120,23 @@ IMPROVED_QRCS_CONFIG = {
     'auto_adapt': True,
 }
 
+RP_QRCS_CONFIG = {
+    'n_samples': 5000,                      # Total coalition samples
+    'measurement_ratio': 0.2,               # Ratio of measurements to samples
+    'projection_type': 'gaussian',          # 'gaussian', 'bernoulli', or 'sparse'
+    'allocation_strategy': 'shapley_weighted',  # 'shapley_weighted', 'uniform', or 'leverage'
+    'use_importance_weighting': True,       # Use importance weights for unbiased estimation
+    'seed': 42,
+}
+
 MULTILINEAR_CONFIG = {
     'max_exact_size': 10,
     'n_quadrature': 21,      # Quadrature points for integration (odd number preferred)
     'n_samples': 100,        # Samples per quadrature point for partial derivative estimation
+    'use_leverage': True,    # Use leverage-stratified sampling (LEM)
+    'compute_error_bounds': True,  # Compute rigorous error bounds
+    'confidence': 0.95,      # Confidence level for error bounds
+    'seed': 42,              # Random seed for reproducibility
 }
 
 # Plotting configuration
@@ -694,13 +709,14 @@ def _save_cache(cache_file, **data):
 # CHARACTERISTIC FUNCTION
 # ==============================================================================
 
-def _train_model_once(X, y):
+def _train_model_once(X, y, model):
     """
     Train model once for use in characteristic function.
 
     Args:
         X: Feature dataframe
         y: Target values
+        model: Pre-configured model (LGBMRegressor or LGBMClassifier)
 
     Returns:
         Tuple of (model, X_train, X_test, y_test)
@@ -708,11 +724,15 @@ def _train_model_once(X, y):
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='cpu')
-    print("Training model once...")
+
+    is_classifier = isinstance(model, lgb.LGBMClassifier)
+    task_type = "Classification" if is_classifier else "Regression"
+    metric_name = "Accuracy" if is_classifier else "R²"
+
+    print(f"Training model once ({task_type})...")
     model.fit(X_train, y_train)
-    print(f"  Train R²: {model.score(X_train, y_train):.4f}")
-    print(f"  Test R²: {model.score(X_test, y_test):.4f}")
+    print(f"  Train {metric_name}: {model.score(X_train, y_train):.4f}")
+    print(f"  Test {metric_name}: {model.score(X_test, y_test):.4f}")
 
     return model, X_train, X_test, y_test
 
@@ -720,7 +740,7 @@ def _train_model_once(X, y):
 def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_full,
                                    use_masking=True, imputation_strategy='mean'):
     """
-    Create characteristic function for regression task.
+    Create characteristic function for regression or classification task.
 
     Args:
         model: Pre-trained model (TRAINED ONCE!)
@@ -736,6 +756,12 @@ def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_fu
     Returns:
         CharacteristicFunction instance
     """
+    # Determine if this is a classification or regression task
+    is_classifier = isinstance(model, lgb.LGBMClassifier)
+    metric_fn = accuracy_score if is_classifier else r2_score
+    task_type = "Classification" if is_classifier else "Regression"
+    metric_name = "Accuracy" if is_classifier else "R2"
+
     if use_masking:
         # FAST: Use pre-trained model with masking for coalitions
         print(f"Using efficient masking approach with '{imputation_strategy}' imputation")
@@ -748,15 +774,16 @@ def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_fu
             X=X_test,     # Evaluate on test set
             y=y_test,
             masking_strategy=imputation_strategy,  # Use specified strategy
-            metric_fn=r2_score,
+            metric_fn=metric_fn,
             baseline=baseline,  # ✓ Use training set statistics!
-            name=f"Regression R2 (Masking-{imputation_strategy})"
+            name=f"{task_type} {metric_name} (Masking-{imputation_strategy})"
         )
     else:
         # SLOW: Retrain model for each coalition (original approach)
         print("Using retraining approach (slower, for comparison)")
+
         def characteristic_function_wrapper(coalition: Set[int], context: nx.Graph) -> float:
-            """Compute R2 score for coalition of features."""
+            """Compute metric score for coalition of features."""
             if len(coalition) == 0:
                 return 0
 
@@ -764,15 +791,20 @@ def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_fu
             cols = list(coalition)
             X_subset = X_full[cols]
 
-            X_train, X_test, y_train, y_test = train_test_split(
+            X_tr, X_te, y_tr, y_te = train_test_split(
                 X_subset, y_full, test_size=0.2, random_state=42
             )
-            lgb_model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='cpu')
-            lgb_model.fit(X_train, y_train)
-            y_pred = lgb_model.predict(X_test)
-            return r2_score(y_test, y_pred)
 
-        return CustomFunction(characteristic_function_wrapper, name="Regression R2 (Retraining)")
+            if is_classifier:
+                lgb_model = lgb.LGBMClassifier(learning_rate=0.3, verbosity=-1, device='cpu')
+            else:
+                lgb_model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='cpu')
+
+            lgb_model.fit(X_tr, y_tr)
+            y_pred = lgb_model.predict(X_te)
+            return metric_fn(y_te, y_pred)
+
+        return CustomFunction(characteristic_function_wrapper, name=f"{task_type} {metric_name} (Retraining)")
 
 
 # ==============================================================================
@@ -895,7 +927,29 @@ def _compute_all_explainers(G, custom_char_func, X):
         print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
     print(f"  Time: {time_results['ImprovedBlockQRCS']:.2f}s")
 
-    # 8. Leverage SHAP
+    # 8. RP-QRCS (Random Projection QRCS with Stratified Sampling)
+    print("\nComputing RP-QRCS Shapley values (stratified sampling)...")
+    print("Using stratified Shapley-weighted sampling + random projections")
+    print("This fixes the coalition size bias in original QRCS")
+    start_time = time.time()
+    rp_qrcs_explainer = RPQRCSExplainer(
+        characteristic_function=custom_char_func,
+        verbose=True,
+        **RP_QRCS_CONFIG
+    )
+    all_values['rp_qrcs'] = rp_qrcs_explainer.fit_explain(G)
+    time_results['RP-QRCS'] = time.time() - start_time
+
+    # Print sampling statistics
+    rp_stats = rp_qrcs_explainer.get_sampling_stats()
+    if rp_stats:
+        print(f"\nRP-QRCS Sampling Statistics:")
+        print(f"  Total samples: {rp_stats.total_budget}")
+        nonzero_strata = sum(1 for a in rp_stats.allocations_by_size if a > 0)
+        print(f"  Strata with samples: {nonzero_strata}/{rp_stats.n_players}")
+    print(f"  Time: {time_results['RP-QRCS']:.2f}s")
+
+    # 9. Leverage SHAP
     print("\nComputing Leverage SHAP values (ICLR 2025)...")
     print("Using leverage score sampling with provable O(n log n) guarantees")
     start_time = time.time()
@@ -909,9 +963,9 @@ def _compute_all_explainers(G, custom_char_func, X):
     print(f"  Time: {time_results['LeverageSHAP']:.2f}s")
     print("  Achieved ~50% error reduction compared to Kernel SHAP (based on paper)")
 
-    # 9. Multilinear Extension (Owen 1972)
-    print("\nComputing Multilinear Extension Shapley values...")
-    print("Using Owen's multilinear extension theory (no graph structure)")
+    # 10. Multilinear Extension with Leverage Sampling (Owen 1972 + Musco & Witter 2025)
+    print("\nComputing Multilinear Extension Shapley values (with leverage sampling)...")
+    print("Using Owen's multilinear extension + leverage-stratified sampling (LEM)")
     start_time = time.time()
     multilinear_explainer = MultilinearExplainer(
         characteristic_function=custom_char_func,
@@ -919,12 +973,36 @@ def _compute_all_explainers(G, custom_char_func, X):
         **MULTILINEAR_CONFIG
     )
     all_values['multilinear'] = multilinear_explainer.fit_explain(G)
-    time_results['Multilinear'] = time.time() - start_time
+    time_results['Multilinear-LEM'] = time.time() - start_time
 
     # Get computation statistics
     ml_stats = multilinear_explainer.get_computation_stats()
     print(f"  Method used: {ml_stats.get('method_used', 'N/A')}")
-    print(f"  Time: {time_results['Multilinear']:.2f}s")
+    if ml_stats.get('use_leverage'):
+        print(f"  Leverage efficiency: {ml_stats.get('leverage_efficiency', 1.0):.2f}x")
+    error_bounds = multilinear_explainer.get_error_bounds()
+    if error_bounds:
+        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
+    print(f"  Time: {time_results['Multilinear-LEM']:.2f}s")
+
+    # 11. Multilinear Extension with Naive Sampling (Owen 1972 only)
+    print("\nComputing Multilinear Extension Shapley values (naive sampling)...")
+    print("Using Owen's multilinear extension + naive Bernoulli sampling")
+    start_time = time.time()
+    multilinear_naive_config = {k: v for k, v in MULTILINEAR_CONFIG.items()}
+    multilinear_naive_config['use_leverage'] = False
+    multilinear_naive_config['compute_error_bounds'] = False
+    multilinear_naive_explainer = MultilinearExplainer(
+        characteristic_function=custom_char_func,
+        verbose=True,
+        **multilinear_naive_config
+    )
+    all_values['multilinear_naive'] = multilinear_naive_explainer.fit_explain(G)
+    time_results['Multilinear-Naive'] = time.time() - start_time
+
+    ml_naive_stats = multilinear_naive_explainer.get_computation_stats()
+    print(f"  Method used: {ml_naive_stats.get('method_used', 'N/A')}")
+    print(f"  Time: {time_results['Multilinear-Naive']:.2f}s")
 
     return all_values, time_results
 
@@ -947,8 +1025,10 @@ def _convert_to_feature_rankings(all_values, X, model, y):
         'BlockQRCS': 'block_qrcs',
         'ImprovedQRCS': 'improved_qrcs',
         'ImprovedBlockQRCS': 'improved_block_qrcs',
+        'RP-QRCS': 'rp_qrcs',
         'LeverageSHAP': 'leverage_shap',
-        'Multilinear': 'multilinear',
+        'Multilinear-LEM': 'multilinear',
+        'Multilinear-Naive': 'multilinear_naive',
     }
 
     for display_name, key in methods_mapping.items():
@@ -1162,7 +1242,8 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
     Returns:
         Tuple of (shapley_values, cis_values, random_cs_values, qrcs_values,
                  block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-                 leverage_shap_values, improved_shapley_values, time_results, kpi_results)
+                 rp_qrcs_values, leverage_shap_values, improved_shapley_values,
+                 time_results, kpi_results)
     """
     # Load data
     X, y = reader()
@@ -1181,6 +1262,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             'block_qrcs': cached_data['block_qrcs_values'],
             'improved_qrcs': cached_data['improved_qrcs_values'],
             'improved_block_qrcs': cached_data['improved_block_qrcs_values'],
+            'rp_qrcs': cached_data.get('rp_qrcs_values', {}),
             'leverage_shap': cached_data.get('leverage_shap_values', {}),
         }
         time_results = cached_data['time_results']
@@ -1191,7 +1273,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
         print("\n" + "=" * 60)
         print("STEP 1: Train model once")
         print("=" * 60)
-        trained_model, X_train, X_test, y_test = _train_model_once(X, y)
+        trained_model, X_train, X_test, y_test = _train_model_once(X, y, model)
 
         # Build graph
         print("\n" + "=" * 60)
@@ -1233,7 +1315,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
     if test_improved_graphs:
         # Train model if we only loaded from cache
         if cached_data:
-            trained_model, X_train, X_test, y_test = _train_model_once(X, y)
+            trained_model, X_train, X_test, y_test = _train_model_once(X, y, model)
 
         # Create characteristic function with training set baseline
         custom_char_func = _create_characteristic_function(
@@ -1286,6 +1368,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             block_qrcs_values=all_values['block_qrcs'],
             improved_qrcs_values=all_values['improved_qrcs'],
             improved_block_qrcs_values=all_values['improved_block_qrcs'],
+            rp_qrcs_values=all_values['rp_qrcs'],
             leverage_shap_values=all_values['leverage_shap'],
             improved_shapley_values=improved_shapley_values,
             time_results=time_results,
@@ -1308,6 +1391,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
         all_values['block_qrcs'],
         all_values['improved_qrcs'],
         all_values['improved_block_qrcs'],
+        all_values['rp_qrcs'],
         all_values['leverage_shap'],
         improved_shapley_values,
         time_results,
@@ -1398,16 +1482,21 @@ Examples:
     print(f"  Dataset: {args.dataset}")
     print(f"  Top features: {args.limit}")
 
-    # Select dataset reader
-    reader = housing_data_reader if args.dataset == 'housing' else h1n1_data_reader
-
-    # Example usage with new API
-    model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
+    # Select dataset reader and appropriate model
+    if args.dataset == 'housing':
+        reader = housing_data_reader
+        model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
+        print(f"  Task type: Regression (using LGBMRegressor, metric: R²)")
+    else:  # h1n1
+        reader = h1n1_data_reader
+        model = lgb.LGBMClassifier(learning_rate=0.3, verbosity=-1)
+        print(f"  Task type: Classification (using LGBMClassifier, metric: Accuracy)")
 
     print("\nRunning benchmark...")
     (shapley_values, cis_values, random_cs_values, qrcs_values,
      block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-     leverage_shap_values, improved_shapley_values, time_results, results) = benchmark_feature_importance(
+     rp_qrcs_values, leverage_shap_values, improved_shapley_values,
+     time_results, results) = benchmark_feature_importance(
         reader,
         model,
         dataset=args.dataset,
@@ -1429,6 +1518,7 @@ Examples:
     print("Block QR-CS values:", block_qrcs_values)
     print("Improved QR-CS values:", improved_qrcs_values)
     print("Improved Block QR-CS values:", improved_block_qrcs_values)
+    print("RP-QRCS values:", rp_qrcs_values)
     print("Leverage SHAP values:", leverage_shap_values)
     if improved_shapley_values:
         print("\nImproved graph Shapley values:")
