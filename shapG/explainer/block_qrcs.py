@@ -5,7 +5,7 @@ Based on Section 6.3 of: "A novel sparsity-based deterministic method for Shaple
 This implements the block version for high-dimensional problems with parallel/distributed computation support.
 """
 
-from typing import Dict, Set, Union, Optional, Tuple, Callable, List
+from typing import Dict, Set, Union, Optional, Tuple, Callable, List, Any
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -20,12 +20,11 @@ try:
 except ImportError:
     CVXPY_AVAILABLE = False
 
-from .base import GraphExplainer, CharacteristicFunction
+from .base import Explainer, CharacteristicFunction
 from ..characteristic.characteristic_functions import CoalitionDegree
-from ..utils.graph_construction import GraphBuilder
 
 
-class BlockQRCSExplainer(GraphExplainer):
+class BlockQRCSExplainer(Explainer):
     """Block QR-CS Shapley value approximation using compressed sensing.
 
     This explainer extends QRCSExplainer to handle high-dimensional problems
@@ -41,6 +40,12 @@ class BlockQRCSExplainer(GraphExplainer):
     - Large-scale problems where m (number of coalitions) is very large
     - Distributed computing environments
     - Memory-constrained systems
+
+    Note:
+        This explainer is decoupled from graph structure. It accepts various input
+        types to determine the number of players and their identifiers. The actual
+        use of any structure (graph, data, etc.) is delegated to the characteristic
+        function via the context parameter.
     """
 
     def __init__(
@@ -82,26 +87,88 @@ class BlockQRCSExplainer(GraphExplainer):
         self.parallel = parallel
         self.max_workers = max_workers
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'BlockQRCSExplainer':
+        # Will be set during fit
+        self.n = None  # Number of players
+        self.player_ids = None  # Player identifiers
+        self._context = None  # Context passed to characteristic function
+
+    def _parse_input(
+        self,
+        X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
+        context: Optional[Any] = None
+    ) -> Tuple[int, List, Any]:
+        """Parse input to extract player count, identifiers, and context.
+
+        Args:
+            X: Input that defines players. Can be:
+               - int: number of players (ids will be 0..n-1)
+               - nx.Graph: n = number_of_nodes(), ids = nodes()
+               - pd.DataFrame: n = number of columns, ids = column names
+               - np.ndarray: n = number of columns (2D) or length (1D)
+               - List: n = length, ids = elements or indices
+            context: Optional context for characteristic function.
+                     If None and X is Graph/DataFrame/array, X is used as context.
+
+        Returns:
+            Tuple of (n_players, player_ids, context)
+        """
+        if isinstance(X, int):
+            n = X
+            player_ids = list(range(n))
+            ctx = context
+        elif isinstance(X, nx.Graph):
+            n = X.number_of_nodes()
+            player_ids = list(X.nodes())
+            ctx = context if context is not None else X
+        elif isinstance(X, pd.DataFrame):
+            n = X.shape[1]
+            player_ids = list(X.columns)
+            ctx = context if context is not None else X
+        elif isinstance(X, np.ndarray):
+            if X.ndim == 1:
+                n = len(X)
+            else:
+                n = X.shape[1]
+            player_ids = list(range(n))
+            ctx = context if context is not None else X
+        elif isinstance(X, list):
+            n = len(X)
+            try:
+                if len(set(X)) == len(X):
+                    player_ids = list(X)
+                else:
+                    player_ids = list(range(n))
+            except TypeError:
+                player_ids = list(range(n))
+            ctx = context
+        else:
+            raise ValueError(f"Unsupported input type: {type(X)}")
+
+        return n, player_ids, ctx
+
+    def fit(
+        self,
+        X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
+        context: Optional[Any] = None,
+        **kwargs
+    ) -> 'BlockQRCSExplainer':
         """Fit the explainer to data.
 
         Args:
-            X: Input data or graph
-            **kwargs: Additional arguments
+            X: Input that defines players. Can be:
+               - int: number of players directly
+               - nx.Graph: uses nodes as players
+               - pd.DataFrame: uses columns as players
+               - np.ndarray: uses columns (2D) or elements (1D) as players
+               - List: uses elements as player identifiers
+            context: Optional context passed to characteristic function.
+                     If None and X is Graph/DataFrame/array, X is used as context.
+            **kwargs: Additional arguments (unused, for compatibility)
 
         Returns:
             Self
         """
-        if isinstance(X, nx.Graph):
-            self.graph = X
-        elif isinstance(X, (np.ndarray, pd.DataFrame)):
-            builder = GraphBuilder()
-            self.graph = builder.from_correlation(X, **kwargs)
-        else:
-            raise ValueError(f"Unsupported input type: {type(X)}")
-
-        self.n = self.graph.number_of_nodes()
-        self.nodes = list(self.graph.nodes())
+        self.n, self.player_ids, self._context = self._parse_input(X, context)
 
         # Compute total coalition space size
         self.m_total = min(2**(self.n - 1), 5000)  # Cap for memory
@@ -158,32 +225,35 @@ class BlockQRCSExplainer(GraphExplainer):
 
     def explain(
         self,
-        X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
+        X: Optional[Union[int, np.ndarray, pd.DataFrame, nx.Graph, List]] = None,
+        context: Optional[Any] = None,
         **kwargs
-    ) -> Dict[int, float]:
+    ) -> Dict:
         """Compute Block QR-CS Shapley values.
 
         Args:
             X: Optional input (uses fitted data if None)
+            context: Optional context for characteristic function
             **kwargs: Additional arguments
 
         Returns:
-            Shapley values for each node
+            Shapley values for each player (keyed by player_id)
         """
         if X is not None:
-            self.fit(X, **kwargs)
+            self.fit(X, context=context, **kwargs)
         elif not self._fitted:
             raise ValueError("Explainer not fitted. Call fit() first or provide X.")
 
         def utility_wrapper(S: Set[int]) -> float:
-            node_set = {self.nodes[i] for i in S}
-            return self.characteristic_function(node_set, self.graph)
+            # Map internal indices to player identifiers
+            player_set = {self.player_ids[i] for i in S}
+            return self.characteristic_function(player_set, self._context)
 
         # Compute Shapley values using block decomposition
         shapley_indices = self._compute_shapley_blocks(utility_wrapper)
 
-        # Map back to node names
-        shapley_values = {self.nodes[i]: value for i, value in shapley_indices.items()}
+        # Map back to player identifiers
+        shapley_values = {self.player_ids[i]: value for i, value in shapley_indices.items()}
 
         return shapley_values
 

@@ -19,7 +19,7 @@ References:
         "Provably Accurate Shapley Value Estimation via Leverage Score Sampling"
 """
 
-from typing import Dict, Set, Union, Optional, Tuple, List, Callable
+from typing import Dict, Set, Union, Optional, Tuple, List, Callable, Any
 from dataclasses import dataclass
 from math import factorial, sqrt, log
 import numpy as np
@@ -36,9 +36,8 @@ try:
 except ImportError:
     CVXPY_AVAILABLE = False
 
-from .base import GraphExplainer, CharacteristicFunction
+from .base import Explainer, CharacteristicFunction
 from ..characteristic.characteristic_functions import CoalitionDegree
-from ..utils.graph_construction import GraphBuilder
 
 
 # =============================================================================
@@ -88,7 +87,8 @@ class StratifiedCoalitionSampler:
         How to allocate budget across strata:
         - 'shapley_weighted': proportional to Shapley weight × stratum size
         - 'uniform': equal allocation per stratum
-        - 'leverage': based on leverage scores (like LeverageScoreExplainer)
+        - 'leverage': based on leverage scores (inverse coalition count, deterministic)
+        - 'leverage_bernoulli': Bernoulli sampling with leverage scores (adapted from Musco & Witter 2025)
     seed : int, optional
         Random seed for reproducibility
     """
@@ -113,8 +113,11 @@ class StratifiedCoalitionSampler:
         # Precompute Shapley weights and coalition counts
         self._precompute()
 
-        # Compute allocation
-        self.allocations = self._compute_allocations()
+        # Compute allocation (skip for leverage_bernoulli, handled during sampling)
+        if allocation_strategy != 'leverage_bernoulli':
+            self.allocations = self._compute_allocations()
+        else:
+            self.allocations = None  # Will be computed dynamically
 
     def _precompute(self):
         """Precompute Shapley weights and coalition counts per size."""
@@ -167,6 +170,11 @@ class StratifiedCoalitionSampler:
             else:
                 importance = np.ones(n) / n
 
+        elif self.allocation_strategy == 'leverage_bernoulli':
+            # Bernoulli sampling - allocations computed dynamically
+            # This is a placeholder, actual sampling happens in sample_all_strata_bernoulli
+            return np.zeros(n, dtype=int)
+
         else:
             raise ValueError(f"Unknown allocation strategy: {self.allocation_strategy}")
 
@@ -196,6 +204,182 @@ class StratifiedCoalitionSampler:
                 remaining -= can_add
 
         return allocations
+
+    def _compute_leverage_score(self, size: int, n_others: int) -> float:
+        """
+        Compute leverage score for coalition size.
+
+        Adapted from Lemma 3.2: ℓ_s = C(n-1, s)^{-1}
+
+        Parameters
+        ----------
+        size : int
+            Coalition size
+        n_others : int
+            Number of other players (n-1)
+
+        Returns
+        -------
+        float
+            Leverage score
+        """
+        if size < 0 or size > n_others:
+            return 0.0
+        n_coalitions = comb(n_others, size, exact=False)
+        if n_coalitions == 0:
+            return 0.0
+        return 1.0 / n_coalitions
+
+    def _find_c_binary_search(self, n_others: int, target_budget: int) -> float:
+        """
+        Find oversampling parameter c via binary search.
+
+        Solves: target_budget ≈ Σ_{s=0}^{n-1} min(N_s, 2c * ℓ_s * N_s)
+        where N_s = C(n_others, s), ℓ_s = 1/N_s
+
+        Note: With paired sampling, actual samples ≈ 2 * target_budget
+
+        Parameters
+        ----------
+        n_others : int
+            Number of other players (n-1)
+        target_budget : int
+            Target number of coalition pairs
+
+        Returns
+        -------
+        float
+            Oversampling parameter c
+        """
+        def expected_pairs(c):
+            """Expected number of coalition pairs sampled."""
+            total = 0
+            for s in range(n_others + 1):
+                n_coalitions = comb(n_others, s, exact=False)
+                if n_coalitions == 0:
+                    continue
+                leverage_score = self._compute_leverage_score(s, n_others)
+                prob = min(1.0, 2 * c * leverage_score)
+                # Each coalition sampled contributes 1 pair (S, complement)
+                expected_sampled = prob * n_coalitions
+                total += expected_sampled
+            # Paired sampling: if we sample S, we also get complement
+            # But we need to avoid double counting for s and n_others-s
+            # For simplicity, just count expected samples
+            return total / 2  # Each pair counted once
+
+        # Binary search for c
+        c_low, c_high = 0.01, 100.0
+
+        for _ in range(50):  # Max iterations
+            c_mid = (c_low + c_high) / 2
+            pairs = expected_pairs(c_mid)
+
+            if abs(pairs - target_budget) < 1:
+                return c_mid
+
+            if pairs < target_budget:
+                c_low = c_mid
+            else:
+                c_high = c_mid
+
+        return c_mid
+
+    def sample_all_strata_bernoulli(
+        self,
+        player: int
+    ) -> Tuple[List[Set[int]], np.ndarray, np.ndarray]:
+        """
+        Sample coalitions using Bernoulli sampling with leverage scores.
+
+        Adapted from LeverageScoreExplainer (Musco & Witter 2025):
+        - Uses leverage scores ℓ_s = C(n-1, s)^{-1}
+        - Bernoulli sampling with probability p_s = min(1, 2c·ℓ_s)
+        - Paired sampling (S, complement) for variance reduction
+        - Oversampling parameter c tuned via binary search
+
+        Parameters
+        ----------
+        player : int
+            The player index (0 to n-1) for whom we're sampling coalitions
+
+        Returns
+        -------
+        coalitions : List[Set[int]]
+            List of sampled coalitions (excluding target player)
+        sizes : np.ndarray
+            Coalition size for each sampled coalition
+        weights : np.ndarray
+            Importance weight for each sample (1 / sampling probability).
+            This provides the sampling correction factor for unbiased estimation.
+            Each coalition uses the weight corresponding to its own size.
+        """
+        other_players = [j for j in range(self.n) if j != player]
+        n_others = len(other_players)
+
+        # Find oversampling parameter c
+        # Target: budget/2 pairs (since paired sampling doubles samples)
+        target_pairs = self.budget // 2
+        c = self._find_c_binary_search(n_others, target_pairs)
+
+        coalitions = []
+        sizes = []
+        weights = []
+
+        # Sample coalitions by size
+        for s in range(n_others + 1):
+            # Leverage score
+            leverage_score = self._compute_leverage_score(s, n_others)
+            if leverage_score == 0:
+                continue
+
+            # Sampling probability
+            prob = min(1.0, 2 * c * leverage_score)
+            if prob == 0:
+                continue
+
+            # Total coalitions of this size
+            n_total = int(comb(n_others, s, exact=True))
+            if n_total == 0:
+                continue
+
+            # Bernoulli sampling: random number of coalitions
+            n_samples = self.rng.binomial(n_total, prob)
+
+            if n_samples == 0:
+                continue
+
+            # Sample specific coalitions uniformly without replacement
+            sampled = self._sample_coalitions_of_size(other_players, s, n_samples)
+
+            # Importance weight = 1 / sampling probability
+            # (Shapley weight is applied separately in the direct estimation formula)
+            importance_weight = 1.0 / prob
+
+            # Compute weight for complement coalitions
+            complement_size = n_others - s
+            leverage_score_complement = self._compute_leverage_score(complement_size, n_others)
+            prob_complement = min(1.0, 2 * c * leverage_score_complement)
+            if prob_complement > 0:
+                importance_weight_complement = 1.0 / prob_complement
+            else:
+                importance_weight_complement = 0.0
+
+            for coalition in sampled:
+                # Add coalition and its complement (paired sampling)
+                complement = set(other_players) - coalition
+
+                coalitions.append(coalition)
+                coalitions.append(complement)
+
+                sizes.append(s)
+                sizes.append(n_others - s)
+
+                # Each gets its own importance weight
+                weights.append(importance_weight)
+                weights.append(importance_weight_complement)
+
+        return coalitions, np.array(sizes), np.array(weights)
 
     def sample_all_strata(self, player: int) -> Tuple[List[Set[int]], np.ndarray, np.ndarray]:
         """
@@ -292,6 +476,17 @@ class StratifiedCoalitionSampler:
 
     def get_stats(self) -> SamplingStats:
         """Get statistics about the sampling configuration."""
+        # For leverage_bernoulli, allocations are computed dynamically
+        if self.allocations is None:
+            # Return placeholder stats for Bernoulli sampling
+            return SamplingStats(
+                n_players=self.n,
+                total_budget=self.budget,
+                allocations_by_size=np.zeros(self.n, dtype=int),
+                actual_samples_by_size=np.zeros(self.n, dtype=int),
+                coverage_by_size=np.zeros(self.n)
+            )
+
         coverage = np.zeros(self.n)
         for s in range(self.n):
             if self.n_coalitions_by_size[s] > 0:
@@ -486,7 +681,7 @@ class L1Solver:
 # Main Explainer Class
 # =============================================================================
 
-class RPQRCSExplainer(GraphExplainer):
+class RPQRCSExplainer(Explainer):
     """
     Random Projection QRCS Shapley value explainer.
 
@@ -497,11 +692,21 @@ class RPQRCSExplainer(GraphExplainer):
 
     The algorithm:
     1. For each player i:
-       a. Sample coalitions using stratified Shapley-weighted sampling
+       a. Sample coalitions using configurable allocation strategy:
+          - 'shapley_weighted': Deterministic allocation proportional to Shapley weights
+          - 'uniform': Equal allocation across all coalition sizes
+          - 'leverage': Inverse coalition count (deterministic, heuristic)
+          - 'leverage_bernoulli': Bernoulli sampling with leverage scores (random, theory-based)
        b. Compute marginal contributions for sampled coalitions
-       c. Use random projection for dimensionality reduction
-       d. Reconstruct full marginal contribution vector via L1 minimization
-       e. Compute Shapley value as weighted sum
+       c. Compute Shapley value via:
+          - Direct weighted estimation (use_direct_estimation=True, recommended)
+          - OR compressed sensing with L1 minimization (use_direct_estimation=False)
+
+    Note:
+        This explainer is decoupled from graph structure. It accepts various input
+        types to determine the number of players and their identifiers. The actual
+        use of any structure (graph, data, etc.) is delegated to the characteristic
+        function via the context parameter.
 
     Parameters
     ----------
@@ -516,11 +721,17 @@ class RPQRCSExplainer(GraphExplainer):
     projection_type : str, default='gaussian'
         Type of random projection: 'gaussian', 'bernoulli', or 'sparse'
     allocation_strategy : str, default='shapley_weighted'
-        How to allocate samples across coalition sizes
+        How to allocate samples across coalition sizes:
+        - 'shapley_weighted': Proportional to Shapley weight × coalition count (recommended)
+        - 'uniform': Equal allocation per stratum
+        - 'leverage': Inverse coalition count (heuristic, may have poor coverage)
+        - 'leverage_bernoulli': Bernoulli sampling with leverage scores (experimental, theory-based)
     tolerance : float, default=1e-4
         L1 optimization tolerance
-    use_importance_weighting : bool, default=True
-        Whether to use importance weights for unbiased estimation
+    use_direct_estimation : bool, default=True
+        If True, use direct weighted estimation (faster, recommended).
+        If False, use compressed sensing with L1 minimization.
+        Note: Both methods use importance weights for unbiased sampling.
     seed : int, optional
         Random seed for reproducibility
     verbose : bool, default=False
@@ -548,7 +759,7 @@ class RPQRCSExplainer(GraphExplainer):
         projection_type: str = 'gaussian',
         allocation_strategy: str = 'shapley_weighted',
         tolerance: float = 1e-4,
-        use_importance_weighting: bool = True,
+        use_direct_estimation: bool = True,
         seed: Optional[int] = None,
         verbose: bool = False
     ):
@@ -560,36 +771,97 @@ class RPQRCSExplainer(GraphExplainer):
         self.projection_type = projection_type
         self.allocation_strategy = allocation_strategy
         self.tolerance = tolerance
-        self.use_importance_weighting = use_importance_weighting
+        self.use_direct_estimation = use_direct_estimation
         self.seed = seed
 
         # Will be set during fit
+        self.n = None  # Number of players
+        self.player_ids = None  # Player identifiers
+        self._context = None  # Context passed to characteristic function
         self._sampler = None
         self._rng = np.random.default_rng(seed)
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'RPQRCSExplainer':
+    def _parse_input(
+        self,
+        X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
+        context: Optional[Any] = None
+    ) -> Tuple[int, List, Any]:
+        """Parse input to extract player count, identifiers, and context.
+
+        Args:
+            X: Input that defines players. Can be:
+               - int: number of players (ids will be 0..n-1)
+               - nx.Graph: n = number_of_nodes(), ids = nodes()
+               - pd.DataFrame: n = number of columns, ids = column names
+               - np.ndarray: n = number of columns (2D) or length (1D)
+               - List: n = length, ids = elements or indices
+            context: Optional context for characteristic function.
+                     If None and X is Graph/DataFrame/array, X is used as context.
+
+        Returns:
+            Tuple of (n_players, player_ids, context)
+        """
+        if isinstance(X, int):
+            n = X
+            player_ids = list(range(n))
+            ctx = context
+        elif isinstance(X, nx.Graph):
+            n = X.number_of_nodes()
+            player_ids = list(X.nodes())
+            ctx = context if context is not None else X
+        elif isinstance(X, pd.DataFrame):
+            n = X.shape[1]
+            player_ids = list(X.columns)
+            ctx = context if context is not None else X
+        elif isinstance(X, np.ndarray):
+            if X.ndim == 1:
+                n = len(X)
+            else:
+                n = X.shape[1]
+            player_ids = list(range(n))
+            ctx = context if context is not None else X
+        elif isinstance(X, list):
+            n = len(X)
+            try:
+                if len(set(X)) == len(X):
+                    player_ids = list(X)
+                else:
+                    player_ids = list(range(n))
+            except TypeError:
+                player_ids = list(range(n))
+            ctx = context
+        else:
+            raise ValueError(f"Unsupported input type: {type(X)}")
+
+        return n, player_ids, ctx
+
+    def fit(
+        self,
+        X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
+        context: Optional[Any] = None,
+        **kwargs
+    ) -> 'RPQRCSExplainer':
         """
         Fit the explainer to data.
 
         Parameters
         ----------
-        X : array-like or Graph
-            Input data or graph
+        X : int, array-like, DataFrame, Graph, or List
+            Input that defines players. Can be:
+            - int: number of players directly
+            - nx.Graph: uses nodes as players
+            - pd.DataFrame: uses columns as players
+            - np.ndarray: uses columns (2D) or elements (1D) as players
+            - List: uses elements as player identifiers
+        context : Any, optional
+            Context passed to characteristic function.
+            If None and X is Graph/DataFrame/array, X is used as context.
 
         Returns
         -------
         self
         """
-        if isinstance(X, nx.Graph):
-            self.graph = X
-        elif isinstance(X, (np.ndarray, pd.DataFrame)):
-            builder = GraphBuilder()
-            self.graph = builder.from_correlation(X, **kwargs)
-        else:
-            raise ValueError(f"Unsupported input type: {type(X)}")
-
-        self.n = self.graph.number_of_nodes()
-        self.nodes = list(self.graph.nodes())
+        self.n, self.player_ids, self._context = self._parse_input(X, context)
 
         # Initialize stratified sampler
         self._sampler = StratifiedCoalitionSampler(
@@ -616,37 +888,41 @@ class RPQRCSExplainer(GraphExplainer):
 
     def explain(
         self,
-        X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
+        X: Optional[Union[int, np.ndarray, pd.DataFrame, nx.Graph, List]] = None,
+        context: Optional[Any] = None,
         **kwargs
-    ) -> Dict[int, float]:
+    ) -> Dict:
         """
         Compute Shapley values using RP-QRCS.
 
         Parameters
         ----------
-        X : array-like or Graph, optional
+        X : int, array-like, DataFrame, Graph, List, optional
             Input data (uses fitted data if None)
+        context : Any, optional
+            Context for characteristic function
 
         Returns
         -------
-        shapley_values : Dict[int, float]
-            Shapley values for each node
+        shapley_values : Dict
+            Shapley values for each player (keyed by player_id)
         """
         if X is not None:
-            self.fit(X, **kwargs)
+            self.fit(X, context=context, **kwargs)
         elif not self._fitted:
             raise ValueError("Explainer not fitted. Call fit() first or provide X.")
 
         # Create utility wrapper
         def utility_func(S: Set[int]) -> float:
-            node_set = {self.nodes[i] for i in S}
-            return self.characteristic_function(node_set, self.graph)
+            # Map internal indices to player identifiers
+            player_set = {self.player_ids[i] for i in S}
+            return self.characteristic_function(player_set, self._context)
 
         # Compute Shapley values
         shapley_indices = self._compute_shapley(utility_func)
 
-        # Map back to node names
-        shapley_values = {self.nodes[i]: value for i, value in shapley_indices.items()}
+        # Map back to player identifiers
+        shapley_values = {self.player_ids[i]: value for i, value in shapley_indices.items()}
 
         return shapley_values
 
@@ -672,7 +948,10 @@ class RPQRCSExplainer(GraphExplainer):
                 print(f"Computing Shapley value for player {player + 1}/{self.n}")
 
             # Step 1: Sample coalitions using stratified sampling
-            coalitions, sizes, weights = self._sampler.sample_all_strata(player)
+            if self.allocation_strategy == 'leverage_bernoulli':
+                coalitions, sizes, weights = self._sampler.sample_all_strata_bernoulli(player)
+            else:
+                coalitions, sizes, weights = self._sampler.sample_all_strata(player)
             m = len(coalitions)
 
             if m == 0:
@@ -687,9 +966,11 @@ class RPQRCSExplainer(GraphExplainer):
                 marginals[j] = v_with - v_without
 
             # Step 3: Compute Shapley value
-            if self.use_importance_weighting:
-                # Weighted average (unbiased estimator)
-                # Group by size and compute weighted contribution
+            if self.use_direct_estimation:
+                # Direct estimation using stratified sampling
+                # Within each size stratum, all coalitions have the same importance weight
+                # (either all exact enumeration with weight=1, or all sampled with weight=N_s/n_s)
+                # Therefore, the weighted mean simplifies to the simple mean
                 shapley_value = 0.0
                 for size in range(self.n):
                     mask = (sizes == size)
@@ -697,7 +978,6 @@ class RPQRCSExplainer(GraphExplainer):
                         continue
 
                     size_marginals = marginals[mask]
-                    size_weights = weights[mask]
 
                     # Shapley weight for this size
                     shapley_weight = self._sampler.shapley_weights[size]
@@ -705,16 +985,11 @@ class RPQRCSExplainer(GraphExplainer):
                     # Number of coalitions of this size
                     n_coalitions = self._sampler.n_coalitions_by_size[size]
 
-                    # Weighted mean of marginals for this size
-                    # weight already accounts for sampling probability
-                    weighted_sum = np.sum(size_marginals * size_weights)
-                    weighted_count = np.sum(size_weights)
+                    # Simple mean (weights cancel out within each size stratum)
+                    size_mean = np.mean(size_marginals)
 
-                    if weighted_count > 0:
-                        size_mean = weighted_sum / weighted_count
-                        # Contribution = Shapley_weight × n_coalitions × mean_marginal
-                        # But since Shapley formula already has the weight, we just need:
-                        shapley_value += shapley_weight * n_coalitions * size_mean
+                    # Shapley value contribution from this size stratum
+                    shapley_value += shapley_weight * n_coalitions * size_mean
 
                 shapley_values[player] = shapley_value
 
@@ -739,6 +1014,9 @@ class RPQRCSExplainer(GraphExplainer):
 
         This maintains the CS framework from original QRCS but with
         random projections instead of DCT.
+
+        Note: weights parameter is kept for API compatibility but not used
+        since weights are constant within each size stratum.
         """
         m = len(marginals)
 
@@ -749,12 +1027,21 @@ class RPQRCSExplainer(GraphExplainer):
             l = max(1, int(m * self.measurement_ratio))
 
         if l >= m:
-            # No compression needed, use weighted average
-            weighted_sum = np.sum(marginals * weights)
-            weighted_count = np.sum(weights)
-            if weighted_count > 0:
-                return weighted_sum / weighted_count
-            return 0.0
+            # No compression needed, use stratified mean
+            shapley_value = 0.0
+            for size in range(self.n):
+                mask = (sizes == size)
+                if not np.any(mask):
+                    continue
+
+                size_marginals = marginals[mask]
+                shapley_weight = self._sampler.shapley_weights[size]
+                n_coalitions = self._sampler.n_coalitions_by_size[size]
+
+                size_mean = np.mean(size_marginals)
+                shapley_value += shapley_weight * n_coalitions * size_mean
+
+            return shapley_value
 
         # Build random projection matrix
         projection = RandomProjectionMatrix(
@@ -771,8 +1058,8 @@ class RPQRCSExplainer(GraphExplainer):
         try:
             u_hat = l1_solver.solve(projection.matrix, y)
 
-            # Compute Shapley value as weighted sum
-            # Weight by importance weights and Shapley weights
+            # Compute Shapley value using stratified mean
+            # Weights are constant within each size stratum so simple mean suffices
             shapley_value = 0.0
             for size in range(self.n):
                 mask = (sizes == size)
@@ -780,29 +1067,34 @@ class RPQRCSExplainer(GraphExplainer):
                     continue
 
                 size_contributions = u_hat[mask]
-                size_weights = weights[mask]
                 shapley_weight = self._sampler.shapley_weights[size]
                 n_coalitions = self._sampler.n_coalitions_by_size[size]
 
-                weighted_sum = np.sum(size_contributions * size_weights)
-                weighted_count = np.sum(size_weights)
-
-                if weighted_count > 0:
-                    size_mean = weighted_sum / weighted_count
-                    shapley_value += shapley_weight * n_coalitions * size_mean
+                size_mean = np.mean(size_contributions)
+                shapley_value += shapley_weight * n_coalitions * size_mean
 
             return shapley_value
 
         except Exception as e:
             warnings.warn(
-                f"CS reconstruction failed: {e}. Falling back to weighted average.",
+                f"CS reconstruction failed: {e}. Falling back to stratified mean.",
                 RuntimeWarning
             )
-            weighted_sum = np.sum(marginals * weights)
-            weighted_count = np.sum(weights)
-            if weighted_count > 0:
-                return weighted_sum / weighted_count
-            return 0.0
+            # Fallback: use stratified mean on original marginals
+            shapley_value = 0.0
+            for size in range(self.n):
+                mask = (sizes == size)
+                if not np.any(mask):
+                    continue
+
+                size_marginals = marginals[mask]
+                shapley_weight = self._sampler.shapley_weights[size]
+                n_coalitions = self._sampler.n_coalitions_by_size[size]
+
+                size_mean = np.mean(size_marginals)
+                shapley_value += shapley_weight * n_coalitions * size_mean
+
+            return shapley_value
 
     def get_sampling_stats(self) -> Optional[SamplingStats]:
         """Get statistics about the sampling configuration."""

@@ -95,11 +95,12 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
         marginal_contribs = []
         for global_idx in sample_indices:
             coalition = self._index_to_coalition(global_idx, player)
-            node_set = {self.nodes[i] for i in coalition}
-            node_set_with = node_set | {self.nodes[player]}
+            # Map internal indices to player identifiers
+            player_set = {self.player_ids[i] for i in coalition}
+            player_set_with = player_set | {self.player_ids[player]}
 
-            v_with = self.characteristic_function(node_set_with, self.graph)
-            v_without = self.characteristic_function(node_set, self.graph) if node_set else 0
+            v_with = self.characteristic_function(player_set_with, self._context)
+            v_without = self.characteristic_function(player_set, self._context) if player_set else 0
             marginal_contribs.append(v_with - v_without)
 
         if len(marginal_contribs) == 0:

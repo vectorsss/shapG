@@ -124,8 +124,8 @@ RP_QRCS_CONFIG = {
     'n_samples': 5000,                      # Total coalition samples
     'measurement_ratio': 0.2,               # Ratio of measurements to samples
     'projection_type': 'gaussian',          # 'gaussian', 'bernoulli', or 'sparse'
-    'allocation_strategy': 'shapley_weighted',  # 'shapley_weighted', 'uniform', or 'leverage'
-    'use_importance_weighting': True,       # Use importance weights for unbiased estimation
+    'allocation_strategy': 'leverage',  # 'shapley_weighted', 'uniform', or 'leverage'
+    'use_direct_estimation': False,          # Use direct weighted estimation (True) or CS reconstruction (False)
     'seed': 42,
 }
 
@@ -796,9 +796,9 @@ def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_fu
             )
 
             if is_classifier:
-                lgb_model = lgb.LGBMClassifier(learning_rate=0.3, verbosity=-1, device='cpu')
+                lgb_model = lgb.LGBMClassifier(learning_rate=0.3, verbosity=-1, device='mps')
             else:
-                lgb_model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='cpu')
+                lgb_model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='mps')
 
             lgb_model.fit(X_tr, y_tr)
             y_pred = lgb_model.predict(X_te)
