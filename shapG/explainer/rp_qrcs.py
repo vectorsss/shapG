@@ -326,8 +326,9 @@ class StratifiedCoalitionSampler:
         sizes = []
         weights = []
 
-        # Sample coalitions by size
-        for s in range(n_others + 1):
+        # Sample coalitions by size (only up to halfway to avoid duplicates from pairing)
+        # For sizes s and (n-s), we only sample from size s and add complements
+        for s in range(n_others // 2 + 1):
             # Leverage score
             leverage_score = self._compute_leverage_score(s, n_others)
             if leverage_score == 0:
@@ -343,6 +344,9 @@ class StratifiedCoalitionSampler:
             if n_total == 0:
                 continue
 
+            # Check if this is the middle size (when s == n_others - s)
+            is_middle_size = (s == n_others - s)
+
             # Bernoulli sampling: random number of coalitions
             n_samples = self.rng.binomial(n_total, prob)
 
@@ -356,28 +360,36 @@ class StratifiedCoalitionSampler:
             # (Shapley weight is applied separately in the direct estimation formula)
             importance_weight = 1.0 / prob
 
-            # Compute weight for complement coalitions
-            complement_size = n_others - s
-            leverage_score_complement = self._compute_leverage_score(complement_size, n_others)
-            prob_complement = min(1.0, 2 * c * leverage_score_complement)
-            if prob_complement > 0:
-                importance_weight_complement = 1.0 / prob_complement
+            if is_middle_size:
+                # Middle size: sample from full space but don't use paired sampling
+                # Each coalition is added once (complements are in same stratum, may or may not be sampled)
+                for coalition in sampled:
+                    coalitions.append(coalition)
+                    sizes.append(s)
+                    weights.append(importance_weight)
             else:
-                importance_weight_complement = 0.0
+                # Non-middle size: use paired sampling for variance reduction
+                # Compute weight for complement coalitions
+                complement_size = n_others - s
+                leverage_score_complement = self._compute_leverage_score(complement_size, n_others)
+                prob_complement = min(1.0, 2 * c * leverage_score_complement)
+                if prob_complement > 0:
+                    importance_weight_complement = 1.0 / prob_complement
+                else:
+                    importance_weight_complement = 0.0
 
-            for coalition in sampled:
-                # Add coalition and its complement (paired sampling)
-                complement = set(other_players) - coalition
+                for coalition in sampled:
+                    complement = set(other_players) - coalition
 
-                coalitions.append(coalition)
-                coalitions.append(complement)
+                    coalitions.append(coalition)
+                    coalitions.append(complement)
 
-                sizes.append(s)
-                sizes.append(n_others - s)
+                    sizes.append(s)
+                    sizes.append(complement_size)
 
-                # Each gets its own importance weight
-                weights.append(importance_weight)
-                weights.append(importance_weight_complement)
+                    # Each gets its own importance weight
+                    weights.append(importance_weight)
+                    weights.append(importance_weight_complement)
 
         return coalitions, np.array(sizes), np.array(weights)
 
