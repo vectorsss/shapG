@@ -537,16 +537,21 @@ class StratifiedCoalitionSampler:
                 coverage_by_size=coverage
             )
 
+        # Use accumulated actual samples if available, otherwise use allocations
+        actual_samples = self._actual_samples_by_size
+        if actual_samples is None:
+            actual_samples = self.allocations.copy()
+
         coverage = np.zeros(self.n)
         for s in range(self.n):
             if self.n_coalitions_by_size[s] > 0:
-                coverage[s] = self.allocations[s] / self.n_coalitions_by_size[s]
+                coverage[s] = actual_samples[s] / self.n_coalitions_by_size[s]
 
         return SamplingStats(
             n_players=self.n,
             total_budget=self.budget,
             allocations_by_size=self.allocations,
-            actual_samples_by_size=self.allocations.copy(),
+            actual_samples_by_size=actual_samples,
             coverage_by_size=coverage
         )
 
