@@ -120,6 +120,9 @@ class StratifiedCoalitionSampler:
         else:
             self.allocations = None  # Will be computed dynamically
 
+        # Track actual samples for leverage_bernoulli (updated during sampling)
+        self._actual_samples_by_size = None
+
     def _precompute(self):
         """Precompute Shapley weights and coalition counts per size."""
         n = self.n
@@ -327,6 +330,9 @@ class StratifiedCoalitionSampler:
         sizes = []
         weights = []
 
+        # Track actual samples by size for statistics
+        actual_samples = np.zeros(self.n, dtype=int)
+
         # Sample coalitions by size (only up to halfway to avoid duplicates from pairing)
         # For sizes s and (n-s), we only sample from size s and add complements
         for s in range(n_others // 2 + 1):
@@ -368,6 +374,7 @@ class StratifiedCoalitionSampler:
                     coalitions.append(coalition)
                     sizes.append(s)
                     weights.append(importance_weight)
+                    actual_samples[s] += 1
             else:
                 # Non-middle size: use paired sampling for variance reduction
                 # Compute weight for complement coalitions
@@ -391,6 +398,16 @@ class StratifiedCoalitionSampler:
                     # Each gets its own importance weight
                     weights.append(importance_weight)
                     weights.append(importance_weight_complement)
+
+                    # Track samples for both sizes
+                    actual_samples[s] += 1
+                    actual_samples[complement_size] += 1
+
+        # Accumulate actual samples tracking (across all players)
+        if self._actual_samples_by_size is None:
+            self._actual_samples_by_size = actual_samples
+        else:
+            self._actual_samples_by_size = self._actual_samples_by_size + actual_samples
 
         return coalitions, np.array(sizes), np.array(weights)
 
@@ -419,6 +436,9 @@ class StratifiedCoalitionSampler:
         sizes = []
         weights = []
 
+        # Track actual samples for statistics
+        actual_samples = np.zeros(self.n, dtype=int)
+
         for size in range(self.n):
             n_samples = self.allocations[size]
             if n_samples == 0:
@@ -435,6 +455,7 @@ class StratifiedCoalitionSampler:
                     sizes.append(size)
                     # Weight = 1 for exact enumeration
                     weights.append(1.0)
+                    actual_samples[size] += 1
             else:
                 # Random sampling without replacement
                 sampled = self._sample_coalitions_of_size(other_players, size, n_samples)
@@ -444,6 +465,13 @@ class StratifiedCoalitionSampler:
                     # Weight = (total coalitions of this size) / (samples of this size)
                     # This ensures unbiased estimation
                     weights.append(n_total / n_samples)
+                    actual_samples[size] += 1
+
+        # Accumulate actual samples tracking (across all players)
+        if self._actual_samples_by_size is None:
+            self._actual_samples_by_size = actual_samples
+        else:
+            self._actual_samples_by_size = self._actual_samples_by_size + actual_samples
 
         return coalitions, np.array(sizes), np.array(weights)
 
@@ -489,15 +517,24 @@ class StratifiedCoalitionSampler:
 
     def get_stats(self) -> SamplingStats:
         """Get statistics about the sampling configuration."""
-        # For leverage_bernoulli, allocations are computed dynamically
+        # For leverage_bernoulli, use tracked actual samples
         if self.allocations is None:
-            # Return placeholder stats for Bernoulli sampling
+            actual_samples = self._actual_samples_by_size
+            if actual_samples is None:
+                actual_samples = np.zeros(self.n, dtype=int)
+
+            # Compute coverage from actual samples
+            coverage = np.zeros(self.n)
+            for s in range(self.n):
+                if self.n_coalitions_by_size[s] > 0:
+                    coverage[s] = actual_samples[s] / self.n_coalitions_by_size[s]
+
             return SamplingStats(
                 n_players=self.n,
                 total_budget=self.budget,
-                allocations_by_size=np.zeros(self.n, dtype=int),
-                actual_samples_by_size=np.zeros(self.n, dtype=int),
-                coverage_by_size=np.zeros(self.n)
+                allocations_by_size=actual_samples,  # Use actual samples as "allocation"
+                actual_samples_by_size=actual_samples,
+                coverage_by_size=coverage
             )
 
         coverage = np.zeros(self.n)

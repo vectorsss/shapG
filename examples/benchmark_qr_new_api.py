@@ -109,7 +109,7 @@ RANDOM_CS_CONFIG = {
 }
 
 LEVERAGE_SHAP_CONFIG = {
-    'n_samples': None,      # Uses 5*n by default
+    'n_samples': 500,      # Uses 5*n by default
     'paired_sampling': True,
     'use_bernoulli': True,
     'random_state': 42,
@@ -121,11 +121,11 @@ IMPROVED_QRCS_CONFIG = {
 }
 
 RP_QRCS_CONFIG = {
-    'n_samples': 5000,                      # Total coalition samples
+    'n_samples': 500,                      # Total coalition samples
     'measurement_ratio': 0.2,               # Ratio of measurements to samples
     'projection_type': 'gaussian',          # 'gaussian', 'bernoulli', or 'sparse'
-    'allocation_strategy': 'leverage',  # 'shapley_weighted', 'uniform', or 'leverage'
-    'use_direct_estimation': False,          # Use direct weighted estimation (True) or CS reconstruction (False)
+    'allocation_strategy': 'leverage_bernoulli',  # 'shapley_weighted', 'uniform', or 'leverage'
+    'use_direct_estimation': True,          # Use direct weighted estimation (True) or CS reconstruction (False)
     'seed': 42,
 }
 
