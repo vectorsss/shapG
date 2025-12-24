@@ -82,8 +82,8 @@ class LeverageScoreExplainer(Explainer):
         self._v_empty = None
         self._v_full = None
 
-        if random_state is not None:
-            np.random.seed(random_state)
+        # Use new Generator API for 64-bit integer support (Windows compatibility)
+        self._rng = np.random.default_rng(random_state)
 
     def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'LeverageScoreExplainer':
         """
@@ -301,13 +301,40 @@ class LeverageScoreExplainer(Explainer):
                 n_subsets = n_subsets // 2
 
             # Sample number of coalitions to draw (Binomial)
-            n_samples_size = np.random.binomial(n_subsets, prob)
+            # Use Poisson approximation when n_subsets exceeds int64 max
+            if n_subsets > 2**63 - 1:
+                # Poisson approximation: Binomial(n, p) ≈ Poisson(n * p) for large n, small p
+                n_samples_size = self._rng.poisson(n_subsets * prob)
+            else:
+                n_samples_size = self._rng.binomial(n_subsets, prob)
 
             if n_samples_size == 0:
                 continue
 
-            # Sample specific coalitions uniformly
-            sampled_indices = np.random.choice(
+            # Sample specific coalitions
+            if n_subsets > 2**63 - 1:
+                # Direct random subset sampling when n_subsets exceeds int64
+                for _ in range(n_samples_size):
+                    coalition = np.zeros(n, dtype=int)
+                    if is_middle:
+                        # For middle size, always include last element
+                        indices = self._rng.choice(n - 1, size=s - 1, replace=False)
+                        coalition[indices] = 1
+                        coalition[-1] = 1
+                    else:
+                        indices = self._rng.choice(n, size=s, replace=False)
+                        coalition[indices] = 1
+                    complement = 1 - coalition
+
+                    Z_prime.append(coalition)
+                    Z_prime.append(complement)
+
+                    w = self._compute_kernel_weight(s, n) / prob
+                    weights.extend([w, w])
+                continue
+
+            # Sample uniformly via indices when n_subsets fits in int64
+            sampled_indices = self._rng.choice(
                 n_subsets, size=n_samples_size, replace=False
             )
 
@@ -355,11 +382,11 @@ class LeverageScoreExplainer(Explainer):
 
         for _ in range(n_pairs):
             # Sample subset size uniformly from {1, ..., n-1}
-            s = np.random.randint(1, n)
+            s = self._rng.integers(1, n)
 
             # Sample coalition of size s uniformly
             coalition = np.zeros(n)
-            indices = np.random.choice(n, size=s, replace=False)
+            indices = self._rng.choice(n, size=s, replace=False)
             coalition[indices] = 1
 
             if self.paired_sampling:

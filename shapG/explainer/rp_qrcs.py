@@ -29,6 +29,7 @@ import warnings
 
 from scipy.special import comb
 from scipy.optimize import minimize
+from scipy.fft import dct, idct
 
 try:
     import cvxpy as cp
@@ -597,6 +598,74 @@ class RandomProjectionMatrix:
 
 
 # =============================================================================
+# Implicit DCT Operator for Large Spaces
+# =============================================================================
+
+class ImplicitDCTOperator:
+    """
+    Implicit operator for A @ s = B @ IDCT(s) without storing full matrix.
+
+    This enables compressed sensing reconstruction for large coalition spaces
+    where storing a full 2^(n-1) × 2^(n-1) DCT matrix is infeasible.
+
+    Parameters
+    ----------
+    sampled_indices : np.ndarray
+        Indices of sampled coalitions in the full space [0, 2^(n-1) - 1]
+    full_size : int
+        Full signal size: 2^(n-1)
+    """
+
+    def __init__(self, sampled_indices: np.ndarray, full_size: int):
+        self.sampled_indices = sampled_indices
+        self.full_size = full_size
+        self.shape = (len(sampled_indices), full_size)
+
+    def matvec(self, s: np.ndarray) -> np.ndarray:
+        """
+        Compute A @ s = B @ IDCT(s) implicitly.
+
+        Parameters
+        ----------
+        s : np.ndarray
+            DCT coefficients (full_size,)
+
+        Returns
+        -------
+        y : np.ndarray
+            Measurements at sampled indices (len(sampled_indices),)
+        """
+        # Fast IDCT: O(N log N) instead of O(N^2)
+        u_full = idct(s, norm='ortho')
+        # Select sampled indices
+        return u_full[self.sampled_indices]
+
+    def rmatvec(self, y: np.ndarray) -> np.ndarray:
+        """
+        Compute A^T @ y implicitly (for iterative solvers).
+
+        Parameters
+        ----------
+        y : np.ndarray
+            Measurements (len(sampled_indices),)
+
+        Returns
+        -------
+        g : np.ndarray
+            Gradient in DCT coefficient space (full_size,)
+        """
+        # Scatter y to full space
+        u_full = np.zeros(self.full_size)
+        u_full[self.sampled_indices] = y
+        # Fast DCT: O(N log N)
+        return dct(u_full, norm='ortho')
+
+    def __matmul__(self, s: np.ndarray) -> np.ndarray:
+        """Matrix multiplication operator."""
+        return self.matvec(s)
+
+
+# =============================================================================
 # L1 Minimization Solver
 # =============================================================================
 
@@ -613,14 +682,14 @@ class L1Solver:
         self.tolerance = tolerance
         self.max_iter = max_iter
 
-    def solve(self, A: np.ndarray, b: np.ndarray) -> np.ndarray:
+    def solve(self, A, b: np.ndarray) -> np.ndarray:
         """
         Solve the L1 minimization problem.
 
         Parameters
         ----------
-        A : np.ndarray
-            Measurement matrix (l x m)
+        A : np.ndarray or ImplicitDCTOperator
+            Measurement matrix/operator (l x m)
         b : np.ndarray
             Measurements (l,)
 
@@ -631,10 +700,16 @@ class L1Solver:
         """
         l, m = A.shape
 
-        if CVXPY_AVAILABLE:
-            return self._solve_cvxpy(A, b)
+        # Check if A is an implicit operator
+        if isinstance(A, ImplicitDCTOperator):
+            # Use method that works with implicit operators
+            return self._solve_implicit(A, b)
         else:
-            return self._solve_scipy(A, b)
+            # A is a numpy array, use standard methods
+            if CVXPY_AVAILABLE:
+                return self._solve_cvxpy(A, b)
+            else:
+                return self._solve_scipy(A, b)
 
     def _solve_cvxpy(self, A: np.ndarray, b: np.ndarray) -> np.ndarray:
         """Solve using CVXPY (preferred method)."""
@@ -687,6 +762,84 @@ class L1Solver:
             )
 
         return result.x if result.success else x0
+
+    def _solve_implicit(self, A: 'ImplicitDCTOperator', b: np.ndarray) -> np.ndarray:
+        """
+        Solve L1 minimization for implicit DCT operator.
+
+        For implicit operators, we cannot use CVXPY because it requires
+        materializing the full matrix. Instead, we use ISTA (Iterative Soft
+        Thresholding Algorithm) which only requires matrix-vector products.
+        """
+        # Use ISTA for implicit operators (can't materialize matrix for cvxpy)
+        return self._ista(A, b)
+
+    def _ista(self, A: 'ImplicitDCTOperator', b: np.ndarray, lam: float = None) -> np.ndarray:
+        """
+        Fast Iterative Soft Thresholding Algorithm (FISTA) for L1 minimization.
+
+        Solves: min λ||x||_1 + (1/2)||Ax - b||_2^2
+
+        Uses Nesterov acceleration for faster convergence.
+        """
+        m = A.shape[1]
+
+        # Auto-tune lambda if not specified
+        if lam is None:
+            # Use noise-based estimate: λ ≈ ||A^T @ noise||_∞
+            # For normalized measurements, a typical value is 0.01-0.1
+            lam = 0.05
+
+        # Better initialization: least squares solution
+        try:
+            # x0 = argmin ||Ax - b||² via gradient descent (few iterations)
+            x = np.zeros(m)
+            for _ in range(10):
+                residual = A.matvec(x) - b
+                grad = A.rmatvec(residual)
+                x = x - 0.5 * grad
+        except:
+            x = np.zeros(m)
+
+        # FISTA with Nesterov acceleration
+        # For operator A = B @ IDCT:
+        # - IDCT is orthonormal: ||IDCT|| = 1
+        # - B is selection operator: ||B|| = 1
+        # - Lipschitz constant L ≤ ||A||² ≤ 1
+        # - Safe step size: α = 1/L ≈ 1.0
+        step_size = 0.9  # Slightly conservative
+
+        y = x.copy()
+        t = 1.0
+
+        for iteration in range(self.max_iter):
+            # Gradient step on y
+            residual = A.matvec(y) - b
+            grad = A.rmatvec(residual)
+            x_new = y - step_size * grad
+
+            # Soft thresholding (proximal operator)
+            x_new = self._soft_threshold(x_new, step_size * lam)
+
+            # Nesterov acceleration
+            t_new = (1.0 + np.sqrt(1.0 + 4.0 * t * t)) / 2.0
+            y = x_new + ((t - 1.0) / t_new) * (x_new - x)
+
+            # Check convergence
+            rel_change = np.linalg.norm(x_new - x) / (np.linalg.norm(x) + 1e-10)
+            if rel_change < 1e-5:
+                if self.tolerance < 1e-4:  # Only print for verbose mode
+                    print(f"  [ISTA] Converged in {iteration+1} iterations")
+                break
+
+            x = x_new
+            t = t_new
+
+        return x
+
+    def _soft_threshold(self, x: np.ndarray, threshold: float) -> np.ndarray:
+        """Soft thresholding operator."""
+        return np.sign(x) * np.maximum(np.abs(x) - threshold, 0)
 
 
 # =============================================================================
@@ -891,9 +1044,13 @@ class RPQRCSExplainer(Explainer):
             print(f"  allocation_strategy: {self.allocation_strategy}")
             print(f"\nSampling allocation:")
             stats = self._sampler.get_stats()
-            for s in range(self.n):
-                if self._sampler.allocations[s] > 0:
-                    print(f"    size {s}: {self._sampler.allocations[s]} samples")
+            if self._sampler.allocations is not None:
+                for s in range(self.n):
+                    if self._sampler.allocations[s] > 0:
+                        print(f"    size {s}: {self._sampler.allocations[s]} samples")
+            else:
+                # For leverage_bernoulli, allocations are determined dynamically
+                print(f"    Dynamic allocation (leverage_bernoulli strategy)")
 
         self._fitted = True
         return self
@@ -970,18 +1127,17 @@ class RPQRCSExplainer(Explainer):
                 shapley_values[player] = 0.0
                 continue
 
-            # Step 2: Compute marginal contributions
-            marginals = np.zeros(m)
-            for j, S in enumerate(coalitions):
-                v_with = utility_func(S | {player})
-                v_without = utility_func(S) if S else 0.0
-                marginals[j] = v_with - v_without
-
-            # Step 3: Compute Shapley value
+            # Step 2 & 3: Compute Shapley value
             if self.use_direct_estimation:
+                # Direct estimation: compute marginals for sampled coalitions only
+                marginals = np.zeros(m)
+                for j, S in enumerate(coalitions):
+                    v_with = utility_func(S | {player})
+                    v_without = utility_func(S) if S else 0.0
+                    marginals[j] = v_with - v_without
+
                 # Direct estimation using stratified sampling
                 # Within each size stratum, all coalitions have the same importance weight
-                # (either all exact enumeration with weight=1, or all sampled with weight=N_s/n_s)
                 # Therefore, the weighted mean simplifies to the simple mean
                 shapley_value = 0.0
                 for size in range(self.n):
@@ -1006,13 +1162,125 @@ class RPQRCSExplainer(Explainer):
                 shapley_values[player] = shapley_value
 
             else:
-                # Use compressed sensing reconstruction
-                shapley_value = self._compute_with_cs(
-                    marginals, weights, sizes, l1_solver
+                # CS reconstruction: reconstruct full 2^(n-1) marginals from samples
+                shapley_value = self._compute_with_cs_implicit(
+                    coalitions, player, utility_func, l1_solver
                 )
                 shapley_values[player] = shapley_value
 
         return shapley_values
+
+    def _coalition_to_index(self, coalition: Set[int], player: int) -> int:
+        """
+        Convert coalition to index in full signal space [0, 2^(n-1) - 1].
+
+        Parameters
+        ----------
+        coalition : Set[int]
+            Coalition excluding target player
+        player : int
+            Target player index
+
+        Returns
+        -------
+        index : int
+            Index in [0, 2^(n-1) - 1]
+        """
+        other_players = [i for i in range(self.n) if i != player]
+        index = 0
+        for i, p in enumerate(other_players):
+            if p in coalition:
+                index |= (1 << i)
+        return index
+
+    def _compute_with_cs_implicit(
+        self,
+        coalitions: List[Set[int]],
+        player: int,
+        utility_func: Callable[[Set[int]], float],
+        l1_solver: L1Solver
+    ) -> float:
+        """
+        Compute Shapley value using compressed sensing with implicit DCT.
+
+        This properly implements CS by:
+        1. Measuring only m sampled coalitions
+        2. Using implicit DCT operator (no full matrix storage)
+        3. Reconstructing full 2^(n-1) marginal vector
+        4. Computing Shapley value from full marginals
+
+        Parameters
+        ----------
+        coalitions : List[Set[int]]
+            Sampled coalitions (m coalitions)
+        player : int
+            Target player index
+        utility_func : callable
+            Function to compute coalition value
+        l1_solver : L1Solver
+            L1 minimization solver
+
+        Returns
+        -------
+        float
+            Shapley value for the player
+        """
+        m = len(coalitions)
+        full_size = 2 ** (self.n - 1)
+
+        if self.verbose:
+            print(f"  [CS] Full space: 2^{self.n-1} = {full_size}")
+            print(f"  [CS] Sampled: {m} coalitions ({100*m/full_size:.2f}%)")
+
+        # Step 1: Map coalitions to indices in [0, 2^(n-1) - 1]
+        sampled_indices = np.array([
+            self._coalition_to_index(S, player) for S in coalitions
+        ])
+
+        # Step 2: Measure marginal contributions for sampled coalitions
+        y = np.zeros(m)
+        for j, S in enumerate(coalitions):
+            v_with = utility_func(S | {player})
+            v_without = utility_func(S) if S else 0.0
+            y[j] = v_with - v_without
+
+        if self.verbose:
+            zero_threshold = 1e-10
+            sparsity_y = np.sum(np.abs(y) < zero_threshold) / len(y)
+            print(f"  [CS] Measurement sparsity: {sparsity_y*100:.1f}%")
+
+        # Step 3: Create implicit DCT operator
+        # A @ s = B @ IDCT(s) where B selects sampled indices
+        A = ImplicitDCTOperator(sampled_indices, full_size)
+
+        # Step 4: Solve min ||s||_1 s.t. ||A @ s - y|| <= epsilon
+        # s are DCT coefficients (hopefully sparse!)
+        try:
+            s_hat = l1_solver.solve(A, y)
+
+            # Check sparsity of recovered coefficients
+            if self.verbose:
+                sparsity_s = np.sum(np.abs(s_hat) < zero_threshold) / len(s_hat)
+                print(f"  [CS] DCT coefficient sparsity: {sparsity_s*100:.1f}%")
+
+            # Step 5: Transform back to marginal domain
+            u_hat = idct(s_hat, norm='ortho')  # Full 2^(n-1) marginals
+
+            # Step 6: Compute Shapley value as weighted sum over full space
+            shapley_value = 0.0
+            for idx in range(full_size):
+                s = bin(idx).count('1')  # Coalition size
+                shapley_weight = self._sampler.shapley_weights[s]
+                shapley_value += shapley_weight * u_hat[idx]
+
+            return shapley_value
+
+        except Exception as e:
+            warnings.warn(
+                f"CS reconstruction failed: {e}. Falling back to mean of samples.",
+                RuntimeWarning
+            )
+            return np.mean(y) if len(y) > 0 else 0.0
 
     def _compute_with_cs(
         self,
@@ -1065,6 +1333,14 @@ class RPQRCSExplainer(Explainer):
 
         # Project marginal contributions
         y = projection @ marginals
+
+        # Check sparsity before reconstruction
+        if self.verbose:
+            zero_threshold = 1e-3
+            n_zeros = np.sum(np.abs(marginals) < zero_threshold)
+            sparsity = n_zeros / len(marginals)
+            print(f"  [CS] Signal sparsity: {sparsity*100:.1f}% ({n_zeros}/{len(marginals)} zeros)")
+            print(f"  [CS] WARNING: Marginals are NOT sparse - CS may not help!")
 
         # Reconstruct via L1 minimization
         try:
