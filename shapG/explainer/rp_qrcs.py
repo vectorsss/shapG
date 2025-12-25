@@ -1,4 +1,4 @@
-"""
+shapG/explainer/rp_qrcs.py"""
 Random Projection QRCS (RP-QRCS) Shapley value computation.
 
 This module implements an improved QRCS algorithm that addresses the coalition
@@ -1248,8 +1248,13 @@ class RPQRCSExplainer(Explainer):
         This properly implements CS by:
         1. Measuring only m sampled coalitions
         2. Using implicit DCT operator (no full matrix storage)
-        3. Reconstructing full 2^(n-1) marginal vector
-        4. Computing Shapley value from full marginals
+        3. Reconstructing DCT coefficients via L1 minimization
+        4. Computing Shapley value either via:
+           - Full IDCT reconstruction (small spaces)
+           - Sparse DCT-domain computation (large spaces)
+
+        For very large spaces where even L1 solving is infeasible,
+        falls back to direct estimation.
 
         Parameters
         ----------
@@ -1268,163 +1273,448 @@ class RPQRCSExplainer(Explainer):
             Shapley value for the player
         """
         m = len(coalitions)
-        full_size = 2 ** (self.n - 1)
+        n_bits = self.n - 1
+        full_size = 2 ** n_bits
 
+        # Memory thresholds based on practical constraints
+        # L1 solver (ISTA) needs multiple arrays of full_size
+        # ~500MB limit => ~16M elements at 8 bytes * 4 arrays
+        MAX_L1_SIZE = 1024 # ~24 players
+        
         if self.verbose:
-            print(f"  [CS] Full space: 2^{self.n-1} = {full_size}")
-            print(f"  [CS] Sampled: {m} coalitions ({100*m/full_size:.2f}%)")
+            print(f"  [CS] Full space: 2^{n_bits} = {full_size}")
+            print(f"  [CS] Sampled: {m} coalitions ({100*m/full_size:.4f}%)")
 
-        # Step 1: Map coalitions to indices in [0, 2^(n-1) - 1]
-        sampled_indices = np.array([
-            self._coalition_to_index(S, player) for S in coalitions
-        ])
+        # For very large spaces, fall back to budget-based stratified CS
+        if full_size > MAX_L1_SIZE:
+            if self.verbose:
+                print(f"  [CS] Space too large for full reconstruction.")
+                print(f"  [CS] Using budget-based stratified CS.")
+                try:
+                    return self._compute_with_cs_stratified_budget(
+                        coalitions, player, utility_func, l1_solver
+                    )
 
-        # Step 2: Measure marginal contributions for sampled coalitions
+                except Exception as e:
+                    warnings.warn(
+                        f"CS reconstruction failed: {e}. Falling back to direct estimation.",
+                        RuntimeWarning
+                    )
+                    return self._compute_direct_from_coalitions(coalitions, player, utility_func)
+
+    def _compute_cs_oversampling_factors(
+        self,
+        allocations: np.ndarray,
+        base_oversampling: int = 4
+    ) -> np.ndarray:
+        """
+        Compute per-stratum oversampling factors for budget-based CS.
+
+        This method handles all allocation strategies uniformly by computing
+        factors based on actual coverage ratio:
+        - Exhaustive strata (n_samples >= n_total): factor = 1
+        - Partial strata: factor = min(base_oversampling, ceil(n_total / n_samples))
+
+        The coverage-based formula works for all strategies:
+        - shapley_weighted: deterministic allocation
+        - uniform: equal allocation
+        - leverage: inverse coalition count
+        - leverage_bernoulli: Bernoulli sampling with probability ~ c * leverage_score
+
+        Capping at ceil(n_total / n_samples) prevents over-allocation beyond
+        what's useful for reconstruction.
+
+        Parameters
+        ----------
+        allocations : np.ndarray
+            Number of samples per stratum (size n)
+        base_oversampling : int
+            Maximum oversampling factor for partial strata (default 4)
+
+        Returns
+        -------
+        np.ndarray
+            Oversampling factor for each stratum
+        """
+        factors = np.ones(self.n, dtype=int)
+
+        for s in range(self.n):
+            n_total = self._sampler.n_coalitions_by_size[s]
+            n_samples = allocations[s]
+
+            if n_samples == 0:
+                # No samples in this stratum, factor doesn't matter
+                factors[s] = 1
+            elif n_samples >= n_total:
+                # Exhaustive sampling - no oversampling needed
+                factors[s] = 1
+            else:
+                # Partial sampling - compute effective oversampling
+                # Cap at ceil(n_total / n_samples) to avoid wasting space
+                max_useful_factor = int(np.ceil(n_total / n_samples))
+                factors[s] = min(base_oversampling, max_useful_factor)
+
+        return factors
+
+    def _compute_with_cs_stratified_budget(
+        self,
+        coalitions: List[Set[int]],
+        player: int,
+        utility_func: Callable[[Set[int]], float],
+        l1_solver: L1Solver,
+        base_oversampling: int = 4
+    ) -> float:
+        """
+        Budget-based CS with stratified one-to-one mapping.
+
+        Key innovations:
+        1. Reconstruction space scales with budget, not 2^(n-1)
+        2. Stratified structure preserved from allocation strategy
+        3. Smart per-stratum oversampling based on coverage ratio:
+           - Exhaustive strata (n_samples >= n_total): factor = 1
+           - Partial strata: factor = min(base, ceil(n_total / n_samples))
+        4. One-to-one mapping (no collisions)
+        5. Spread indices within each stratum for CS incoherence
+
+        Parameters
+        ----------
+        coalitions : List[Set[int]]
+            Sampled coalitions from allocation strategy
+        player : int
+            Target player index
+        utility_func : callable
+            Function to compute coalition value
+        l1_solver : L1Solver
+            L1 minimization solver
+        base_oversampling : int
+            Oversampling factor for partial strata (default 4)
+
+        Returns
+        -------
+        float
+            Shapley value for the player
+        """
+        m = len(coalitions)
+
+        # Step 1: Compute marginals and track sizes
         y = np.zeros(m)
+        sizes = np.zeros(m, dtype=int)
         for j, S in enumerate(coalitions):
             v_with = utility_func(S | {player})
             v_without = utility_func(S) if S else 0.0
             y[j] = v_with - v_without
+            sizes[j] = len(S)
+
+        # Step 2: Count samples per size stratum
+        allocations = np.zeros(self.n, dtype=int)
+        for s in range(self.n):
+            allocations[s] = np.sum(sizes == s)
+
+        # Step 3: Compute per-stratum oversampling factors
+        # Uses coverage-based formula that works for all allocation strategies
+        oversampling_factors = self._compute_cs_oversampling_factors(
+            allocations, base_oversampling
+        )
+        n_exhaustive = np.sum(oversampling_factors == 1)
+        n_partial = self.n - n_exhaustive
+
+        # Step 4: Compute stratum offsets in reconstruction space
+        recon_offsets = np.zeros(self.n + 1, dtype=int)
+        for s in range(self.n):
+            recon_offsets[s + 1] = recon_offsets[s] + oversampling_factors[s] * allocations[s]
+
+        recon_size = recon_offsets[-1]
+
+        # Round up to next power of 2 for efficient DCT
+        recon_size_padded = 1
+        while recon_size_padded < recon_size:
+            recon_size_padded *= 2
 
         if self.verbose:
-            zero_threshold = 1e-10
-            sparsity_y = np.sum(np.abs(y) < zero_threshold) / len(y)
-            print(f"  [CS] Measurement sparsity: {sparsity_y*100:.1f}%")
+            print(f"  [CS-Stratified] m={m}, recon_size={recon_size_padded}")
+            print(f"  [CS-Stratified] Exhaustive strata: {n_exhaustive}, "
+                  f"Partial strata: {n_partial}")
+            # Show range of oversampling factors used
+            unique_factors = np.unique(oversampling_factors[oversampling_factors > 1])
+            if len(unique_factors) > 0:
+                print(f"  [CS-Stratified] Oversampling factors: {unique_factors.tolist()}")
 
-        # Step 3: Create implicit DCT operator
-        # A @ s = B @ IDCT(s) where B selects sampled indices
-        A = ImplicitDCTOperator(sampled_indices, full_size)
+        # Step 5: Create one-to-one mapping and pre-compute Shapley weights
+        # Within each stratum: position j -> offset + j * stride
+        # Weight for sample j: w_s * N_s / a_s (importance sampling correction)
+        sampled_indices = np.zeros(m, dtype=int)
+        recon_weights = np.zeros(m)
+        within_stratum_counter = np.zeros(self.n, dtype=int)
 
-        # Step 4: Solve min ||s||_1 s.t. ||A @ s - y|| <= epsilon
-        # s are DCT coefficients (hopefully sparse!)
+        for j in range(m):
+            s = sizes[j]
+            stride = oversampling_factors[s]
+            # Position in recon space = stratum_offset + within_stratum_idx * stride
+            sampled_indices[j] = recon_offsets[s] + within_stratum_counter[s] * stride
+            within_stratum_counter[s] += 1
+            # Pre-compute weight: w_s * N_s / a_s
+            recon_weights[j] = (self._sampler.shapley_weights[s] *
+                                self._sampler.n_coalitions_by_size[s] / allocations[s])
+
+        # Step 6: Create implicit DCT operator in budget-based space
+        A = ImplicitDCTOperator(sampled_indices, recon_size_padded)
+
+        # Step 7: L1 solve
         try:
             s_hat = l1_solver.solve(A, y)
 
-            # Check sparsity of recovered coefficients
             if self.verbose:
-                sparsity_s = np.sum(np.abs(s_hat) < zero_threshold) / len(s_hat)
-                print(f"  [CS] DCT coefficient sparsity: {sparsity_s*100:.1f}%")
+                zero_threshold = 1e-10
+                sparsity = np.sum(np.abs(s_hat) < zero_threshold) / len(s_hat)
+                print(f"  [CS-Stratified] DCT sparsity: {sparsity*100:.1f}%")
 
-            # Step 5: Transform back to marginal domain
-            u_hat = idct(s_hat, norm='ortho')  # Full 2^(n-1) marginals
+            # Step 8: Reconstruct signal
+            u_hat = idct(s_hat, norm='ortho')
 
-            # Step 6: Compute Shapley value as weighted sum over full space
-            shapley_value = 0.0
-            for idx in range(full_size):
-                s = bin(idx).count('1')  # Coalition size
-                shapley_weight = self._sampler.shapley_weights[s]
-                shapley_value += shapley_weight * u_hat[idx]
+            # Step 9: Compute Shapley value via dot product with pre-computed weights
+            # φ = Σ_j recon_weights[j] * u_hat[sampled_indices[j]]
+            shapley_value = float(np.dot(recon_weights, u_hat[sampled_indices]))
 
             return shapley_value
 
         except Exception as e:
             warnings.warn(
-                f"CS reconstruction failed: {e}. Falling back to mean of samples.",
+                f"Stratified CS failed: {e}. Falling back to direct estimation.",
                 RuntimeWarning
             )
-            return np.mean(y) if len(y) > 0 else 0.0
+            return self._compute_direct_from_coalitions(coalitions, player, utility_func)
 
-    def _compute_with_cs(
+    def _compute_direct_from_coalitions(
         self,
-        marginals: np.ndarray,
-        weights: np.ndarray,
-        sizes: np.ndarray,
-        l1_solver: L1Solver
+        coalitions: List[Set[int]],
+        player: int,
+        utility_func: Callable[[Set[int]], float]
     ) -> float:
         """
-        Compute Shapley value using compressed sensing reconstruction.
+        Compute Shapley value using direct estimation from sampled coalitions.
 
-        This maintains the CS framework from original QRCS but with
-        random projections instead of DCT.
+        This is a fallback for when CS reconstruction is infeasible due to
+        memory constraints.
 
-        Note: weights parameter is kept for API compatibility but not used
-        since weights are constant within each size stratum.
+        Parameters
+        ----------
+        coalitions : List[Set[int]]
+            Sampled coalitions
+        player : int
+            Target player index
+        utility_func : callable
+            Function to compute coalition value
+
+        Returns
+        -------
+        float
+            Shapley value estimate
         """
-        m = len(marginals)
+        if not coalitions:
+            return 0.0
 
-        # Determine number of measurements
-        if self.n_measurements is not None:
-            l = min(self.n_measurements, m)
-        else:
-            l = max(1, int(m * self.measurement_ratio))
+        # Compute marginals and sizes
+        marginals = []
+        sizes = []
+        for S in coalitions:
+            v_with = utility_func(S | {player})
+            v_without = utility_func(S) if S else 0.0
+            marginals.append(v_with - v_without)
+            sizes.append(len(S))
 
-        if l >= m:
-            # No compression needed, use stratified mean
-            shapley_value = 0.0
-            for size in range(self.n):
-                mask = (sizes == size)
-                if not np.any(mask):
-                    continue
+        marginals = np.array(marginals)
+        sizes = np.array(sizes)
 
-                size_marginals = marginals[mask]
-                shapley_weight = self._sampler.shapley_weights[size]
-                n_coalitions = self._sampler.n_coalitions_by_size[size]
+        # Direct estimation using stratified sampling formula
+        shapley_value = 0.0
+        for size in range(self.n):
+            mask = (sizes == size)
+            if not np.any(mask):
+                continue
 
-                size_mean = np.mean(size_marginals)
-                shapley_value += shapley_weight * n_coalitions * size_mean
+            size_marginals = marginals[mask]
+            shapley_weight = self._sampler.shapley_weights[size]
+            n_coalitions = self._sampler.n_coalitions_by_size[size]
 
-            return shapley_value
+            size_mean = np.mean(size_marginals)
+            shapley_value += shapley_weight * n_coalitions * size_mean
 
-        # Build random projection matrix
-        projection = RandomProjectionMatrix(
-            n_measurements=l,
-            n_signals=m,
-            projection_type=self.projection_type,
-            seed=self._rng.integers(0, 2**31)
-        )
+        return shapley_value
 
-        # Project marginal contributions
-        y = projection @ marginals
+    def _compute_shapley_from_sparse_dct(
+        self,
+        s_hat: np.ndarray,
+        sparsity_threshold: float = 1e-10
+    ) -> float:
+        """
+        Compute Shapley value directly from sparse DCT coefficients.
 
-        # Check sparsity before reconstruction
+        Uses the identity:
+            φ = w^T @ u = w^T @ IDCT(s) = (DCT(w))^T @ s
+
+        For K-sparse s_hat, we only need DCT(w)[j] at K positions.
+
+        Key insight: w[k] = shapley_weight[popcount(k)] has only n distinct
+        values. This allows efficient computation of DCT(w)[j] using
+        elementary symmetric polynomials in O(n²) time per coefficient.
+
+        Total complexity: O(K × n²) instead of O(2^n).
+
+        Parameters
+        ----------
+        s_hat : np.ndarray
+            DCT coefficients from L1 minimization
+        sparsity_threshold : float
+            Threshold for considering a coefficient as zero
+
+        Returns
+        -------
+        float
+            Shapley value
+        """
+        n_bits = self.n - 1
+        N = len(s_hat)  # Should be 2^n_bits
+
+        # Get sparse support (indices where |s_hat| > threshold)
+        support = np.where(np.abs(s_hat) > sparsity_threshold)[0]
+        K = len(support)
+
+        if K == 0:
+            return 0.0
+
         if self.verbose:
-            zero_threshold = 1e-3
-            n_zeros = np.sum(np.abs(marginals) < zero_threshold)
-            sparsity = n_zeros / len(marginals)
-            print(f"  [CS] Signal sparsity: {sparsity*100:.1f}% ({n_zeros}/{len(marginals)} zeros)")
-            print(f"  [CS] WARNING: Marginals are NOT sparse - CS may not help!")
+            print(f"  [Sparse DCT] {K} non-zero coefficients "
+                  f"(sparsity: {100*(1-K/N):.2f}%)")
 
-        # Reconstruct via L1 minimization
-        try:
-            u_hat = l1_solver.solve(projection.matrix, y)
+        # Shapley weights for each coalition size (0 to n-1)
+        shapley_weights = self._sampler.shapley_weights
 
-            # Compute Shapley value using stratified mean
-            # Weights are constant within each size stratum so simple mean suffices
-            shapley_value = 0.0
-            for size in range(self.n):
-                mask = (sizes == size)
-                if not np.any(mask):
-                    continue
+        # Compute φ = Σ_{j ∈ support} s_hat[j] * DCT(w)[j]
+        shapley_value = 0.0
 
-                size_contributions = u_hat[mask]
-                shapley_weight = self._sampler.shapley_weights[size]
-                n_coalitions = self._sampler.n_coalitions_by_size[size]
-
-                size_mean = np.mean(size_contributions)
-                shapley_value += shapley_weight * n_coalitions * size_mean
-
-            return shapley_value
-
-        except Exception as e:
-            warnings.warn(
-                f"CS reconstruction failed: {e}. Falling back to stratified mean.",
-                RuntimeWarning
+        for j in support:
+            dct_w_j = self._compute_dct_shapley_weight_at_j(
+                j, n_bits, N, shapley_weights
             )
-            # Fallback: use stratified mean on original marginals
-            shapley_value = 0.0
-            for size in range(self.n):
-                mask = (sizes == size)
-                if not np.any(mask):
-                    continue
+            shapley_value += s_hat[j] * dct_w_j
 
-                size_marginals = marginals[mask]
-                shapley_weight = self._sampler.shapley_weights[size]
-                n_coalitions = self._sampler.n_coalitions_by_size[size]
+        return shapley_value
 
-                size_mean = np.mean(size_marginals)
-                shapley_value += shapley_weight * n_coalitions * size_mean
+    def _compute_dct_shapley_weight_at_j(
+        self,
+        j: int,
+        n_bits: int,
+        N: int,
+        shapley_weights: np.ndarray
+    ) -> float:
+        """
+        Compute DCT(w)[j] where w is the Shapley weight vector.
 
-            return shapley_value
+        The Shapley weight vector w has special structure:
+            w[k] = shapley_weight[popcount(k)]
+
+        This allows efficient computation using elementary symmetric polynomials.
+
+        Mathematical derivation:
+            DCT(w)[j] = α[j] × Σ_k w[k] × cos(π×j×(2k+1)/(2N))
+
+        Since w[k] only depends on popcount(k), we can group by coalition size:
+            = α[j] × Σ_s w_s × Σ_{k: popcount(k)=s} cos(π×j×(2k+1)/(2N))
+
+        The inner sum is related to elementary symmetric polynomials:
+            Σ_{k: popcount(k)=s} ω^k = e_s(z_0, z_1, ..., z_{n-2})
+
+        where:
+            - ω = exp(i×π×j/N)
+            - z_m = ω^{2^m}
+            - e_s is the s-th elementary symmetric polynomial
+
+        The generating function Π_m (1 + t×z_m) = Σ_s e_s × t^s can be
+        computed in O(n²) via polynomial multiplication.
+
+        Parameters
+        ----------
+        j : int
+            Frequency index (0 to N-1)
+        n_bits : int
+            Number of bits in coalition index (n - 1)
+        N : int
+            Full space size (2^n_bits)
+        shapley_weights : np.ndarray
+            Shapley weights indexed by coalition size (length n)
+
+        Returns
+        -------
+        float
+            Value of DCT(w)[j]
+        """
+        # Handle edge case: n_bits = 0 means only 1 player
+        if n_bits == 0:
+            # Only one coalition (empty), weight is shapley_weights[0]
+            return shapley_weights[0] / np.sqrt(N)
+
+        # DCT-II normalization factor (orthonormal)
+        if j == 0:
+            alpha = 1.0 / np.sqrt(N)
+        else:
+            alpha = np.sqrt(2.0 / N)
+
+        # Special case: j = 0
+        # All z_m = 1, so e_s = C(n_bits, s)
+        if j == 0:
+            # DCT(w)[0] = (1/√N) × Σ_s w_s × C(n_bits, s)
+            # By Shapley weight normalization, this sum equals 1
+            total = sum(
+                shapley_weights[s] * comb(n_bits, s, exact=True)
+                for s in range(n_bits + 1)
+            )
+            return alpha * total
+
+        # General case: j > 0
+        # ω = exp(i × π × j / N)
+        omega = np.exp(1j * np.pi * j / N)
+
+        # Phase factor for (2k+1) term: exp(i × π × j / (2N))
+        phase = np.exp(1j * np.pi * j / (2 * N))
+
+        # Compute z_m = ω^{2^m} for each bit position m = 0, ..., n_bits-1
+        z = np.zeros(n_bits, dtype=complex)
+        power = 1
+        for m in range(n_bits):
+            z[m] = omega ** power
+            power <<= 1  # power *= 2
+
+        # Compute elementary symmetric polynomials via polynomial multiplication
+        # P(t) = Π_{m=0}^{n_bits-1} (1 + t × z[m])
+        # P(t) = Σ_{s=0}^{n_bits} e_s × t^s
+        # Coefficient poly[s] = e_s(z_0, ..., z_{n_bits-1})
+
+        # Initialize: P(t) = 1 (constant polynomial)
+        poly = np.array([1.0 + 0j])
+
+        for m in range(n_bits):
+            # Multiply P(t) by (1 + t × z[m])
+            # If P(t) = Σ_k a_k t^k, then
+            # P(t) × (1 + t×z) = Σ_k a_k t^k + Σ_k a_k×z t^{k+1}
+            new_poly = np.zeros(len(poly) + 1, dtype=complex)
+            new_poly[:len(poly)] = poly  # Contribution from "1"
+            new_poly[1:len(poly) + 1] += z[m] * poly  # Contribution from "t×z[m]"
+            poly = new_poly
+
+        # poly[s] = e_s = Σ_{|S|=s} Π_{m∈S} z_m
+        #         = Σ_{k: popcount(k)=s} ω^k
+
+        # DCT(w)[j] = α × Σ_s w_s × Re(phase × e_s)
+        # where Re(phase × e_s) = Σ_{k: popcount(k)=s} cos(π×j×(2k+1)/(2N))
+
+        result = 0.0
+        for s in range(n_bits + 1):
+            e_s = poly[s]
+            # B_s(j) = Re(phase × e_s)
+            B_s_j = np.real(phase * e_s)
+            result += shapley_weights[s] * B_s_j
+
+        return alpha * result
 
     def get_sampling_stats(self) -> Optional[SamplingStats]:
         """Get statistics about the sampling configuration."""
