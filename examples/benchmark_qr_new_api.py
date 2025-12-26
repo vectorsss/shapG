@@ -121,9 +121,7 @@ IMPROVED_QRCS_CONFIG = {
 }
 
 RP_QRCS_CONFIG = {
-    'n_samples': 500,                      # Total coalition samples
-    'measurement_ratio': 0.2,               # Ratio of measurements to samples
-    'projection_type': 'gaussian',          # 'gaussian', 'bernoulli', or 'sparse'
+    'n_samples': 50,                      # Total coalition samples
     'allocation_strategy': 'leverage_bernoulli',  # 'shapley_weighted', 'uniform', or 'leverage'
     'use_direct_estimation': True,          # Use direct weighted estimation (True) or CS reconstruction (False)
     'seed': 42,
