@@ -120,7 +120,7 @@ IMPROVED_QRCS_CONFIG = {
     'auto_adapt': True,
 }
 
-RP_QRCS_CONFIG = {
+STRATIFIED_CONFIG = {
     'n_samples': 50,                      # Total coalition samples
     'allocation_strategy': 'leverage_bernoulli',  # 'shapley_weighted', 'uniform', or 'leverage'
     'use_direct_estimation': True,          # Use direct weighted estimation (True) or CS reconstruction (False)
@@ -925,27 +925,27 @@ def _compute_all_explainers(G, custom_char_func, X):
         print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
     print(f"  Time: {time_results['ImprovedBlockQRCS']:.2f}s")
 
-    # 8. RP-QRCS (Random Projection QRCS with Stratified Sampling)
-    print("\nComputing RP-QRCS Shapley values (stratified sampling)...")
-    print("Using stratified Shapley-weighted sampling + random projections")
-    print("This fixes the coalition size bias in original QRCS")
+    # 8. Stratified Shapley (Stratified Coalition Sampling)
+    print("\nComputing Stratified Shapley values...")
+    print("Using stratified coalition sampling with flexible allocation strategies")
+    print("This provides unbiased Shapley value estimation")
     start_time = time.time()
     stratified_explainer = StratifiedShapleyExplainer(
         characteristic_function=custom_char_func,
         verbose=True,
-        **RP_QRCS_CONFIG
+        **STRATIFIED_CONFIG
     )
     all_values['stratified'] = stratified_explainer.fit_explain(G)
-    time_results['RP-QRCS'] = time.time() - start_time
+    time_results['Stratified'] = time.time() - start_time
 
     # Print sampling statistics
-    rp_stats = stratified_explainer.get_sampling_stats()
-    if rp_stats:
-        print(f"\nRP-QRCS Sampling Statistics:")
-        print(f"  Total samples: {rp_stats.total_budget}")
-        nonzero_strata = sum(1 for a in rp_stats.allocations_by_size if a > 0)
-        print(f"  Strata with samples: {nonzero_strata}/{rp_stats.n_players}")
-    print(f"  Time: {time_results['RP-QRCS']:.2f}s")
+    stratified_stats = stratified_explainer.get_sampling_stats()
+    if stratified_stats:
+        print(f"\nStratified Sampling Statistics:")
+        print(f"  Total samples: {stratified_stats.total_budget}")
+        nonzero_strata = sum(1 for a in stratified_stats.allocations_by_size if a > 0)
+        print(f"  Strata with samples: {nonzero_strata}/{stratified_stats.n_players}")
+    print(f"  Time: {time_results['Stratified']:.2f}s")
 
     # 9. Leverage SHAP
     print("\nComputing Leverage SHAP values (ICLR 2025)...")
@@ -1023,7 +1023,7 @@ def _convert_to_feature_rankings(all_values, X, model, y):
         'BlockQRCS': 'block_qrcs',
         'ImprovedQRCS': 'improved_qrcs',
         'ImprovedBlockQRCS': 'improved_block_qrcs',
-        'RP-QRCS': 'stratified',
+        'Stratified': 'stratified',
         'LeverageSHAP': 'leverage_shap',
         'Multilinear-LEM': 'multilinear',
         'Multilinear-Naive': 'multilinear_naive',
@@ -1516,7 +1516,7 @@ Examples:
     print("Block QR-CS values:", block_qrcs_values)
     print("Improved QR-CS values:", improved_qrcs_values)
     print("Improved Block QR-CS values:", improved_block_qrcs_values)
-    print("RP-QRCS values:", stratified_values)
+    print("Stratified values:", stratified_values)
     print("Leverage SHAP values:", leverage_shap_values)
     if improved_shapley_values:
         print("\nImproved graph Shapley values:")

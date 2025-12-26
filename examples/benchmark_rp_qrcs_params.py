@@ -270,7 +270,7 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
                                      imputation_strategy='mean', use_cache=True,
                                      retrain_kpi=False):
     """
-    Benchmark different RP-QRCS configurations.
+    Benchmark different Stratified Shapley configurations.
 
     Args:
         reader: Dataset reader function
@@ -368,7 +368,7 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
         print(f"\n[{i}/{len(configs)}] Testing: {config_name}")
         print(f"  Config: {config}")
 
-        # Run RP-QRCS with this configuration
+        # Run Stratified Shapley with this configuration
         start_time = time.time()
 
         try:
@@ -487,7 +487,7 @@ def plot_error_comparison(results, output_dir=None):
     # Customize plot
     ax.set_xlabel('Configuration', fontsize=12, fontweight='bold')
     ax.set_ylabel('L2 Error', fontsize=12, fontweight='bold')
-    ax.set_title(f'RP-QRCS Parameter Comparison - L2 Error ({dataset})',
+    ax.set_title(f'Stratified Shapley Parameter Comparison - L2 Error ({dataset})',
                  fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
     ax.set_xticklabels(names, rotation=90, ha='right', fontsize=8)
@@ -548,7 +548,7 @@ def plot_time_comparison(results, output_dir=None):
 
     plt.xlabel('Execution Time (seconds)', fontsize=12, fontweight='bold')
     plt.ylabel('Algorithm', fontsize=12, fontweight='bold')
-    plt.title(f'RP-QRCS Execution Time Comparison ({dataset})', fontsize=14, fontweight='bold')
+    plt.title(f'Stratified Shapley Execution Time Comparison ({dataset})', fontsize=14, fontweight='bold')
     plt.grid(axis='x', alpha=0.3, linestyle='--')
     plt.tight_layout()
 
@@ -713,7 +713,7 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
 def plot_kpi_comparison(reader, results, model, dataset, limit=10,
                        retrain_kpi=False, imputation_strategy='mean', output_dir=None):
     """
-    Plot KPI comparison for different RP-QRCS configurations.
+    Plot KPI comparison for different Stratified Shapley configurations.
 
     Shows how model performance degrades as top features are progressively dropped.
 
@@ -793,7 +793,7 @@ def plot_kpi_comparison(reader, results, model, dataset, limit=10,
 
     plt.xlabel('Number of Features Dropped')
     plt.ylabel(metric_name)
-    plt.title(f'RP-QRCS Parameter Comparison - {metric_name} after dropping features ({model_name})')
+    plt.title(f'Stratified Shapley Parameter Comparison - {metric_name} after dropping features ({model_name})')
     plt.legend()
     plt.grid()
 
@@ -896,7 +896,7 @@ def _print_time_comparison_table(results):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='Benchmark different RP-QRCS parameter configurations',
+        description='Benchmark different Stratified Shapley parameter configurations',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
@@ -951,7 +951,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print("=" * 80)
-    print("RP-QRCS PARAMETER BENCHMARK")
+    print("STRATIFIED SHAPLEY PARAMETER BENCHMARK")
     print("=" * 80)
     print(f"\nConfiguration:")
     print(f"  Dataset: {args.dataset}")
