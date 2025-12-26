@@ -10,7 +10,7 @@ Methods compared:
 - BlockQRCSExplainer: Block QR-CS for high-dimensional problems with parallel computation
 - ImprovedQRCSExplainer: Adaptive QR-CS with automatic sparsity detection
 - ImprovedBlockQRCSExplainer: Per-block adaptive detection
-- RPQRCSExplainer: Random Projection QRCS with stratified sampling (fixes coalition bias)
+- StratifiedShapleyExplainer: Stratified coalition sampling with flexible allocation strategies
 - LeverageScoreExplainer: Leverage score sampling (ICLR 2025)
 """
 
@@ -61,7 +61,7 @@ from shapG.explainer import (
     BlockQRCSExplainer,
     ImprovedQRCSExplainer,
     ImprovedBlockQRCSExplainer,
-    RPQRCSExplainer,
+    StratifiedShapleyExplainer,
     LeverageScoreExplainer
 )
 from shapG.characteristic import GraphModelCharacteristic
@@ -930,16 +930,16 @@ def _compute_all_explainers(G, custom_char_func, X):
     print("Using stratified Shapley-weighted sampling + random projections")
     print("This fixes the coalition size bias in original QRCS")
     start_time = time.time()
-    rp_qrcs_explainer = RPQRCSExplainer(
+    stratified_explainer = StratifiedShapleyExplainer(
         characteristic_function=custom_char_func,
         verbose=True,
         **RP_QRCS_CONFIG
     )
-    all_values['rp_qrcs'] = rp_qrcs_explainer.fit_explain(G)
+    all_values['stratified'] = stratified_explainer.fit_explain(G)
     time_results['RP-QRCS'] = time.time() - start_time
 
     # Print sampling statistics
-    rp_stats = rp_qrcs_explainer.get_sampling_stats()
+    rp_stats = stratified_explainer.get_sampling_stats()
     if rp_stats:
         print(f"\nRP-QRCS Sampling Statistics:")
         print(f"  Total samples: {rp_stats.total_budget}")
@@ -1023,7 +1023,7 @@ def _convert_to_feature_rankings(all_values, X, model, y):
         'BlockQRCS': 'block_qrcs',
         'ImprovedQRCS': 'improved_qrcs',
         'ImprovedBlockQRCS': 'improved_block_qrcs',
-        'RP-QRCS': 'rp_qrcs',
+        'RP-QRCS': 'stratified',
         'LeverageSHAP': 'leverage_shap',
         'Multilinear-LEM': 'multilinear',
         'Multilinear-Naive': 'multilinear_naive',
@@ -1240,7 +1240,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
     Returns:
         Tuple of (shapley_values, cis_values, random_cs_values, qrcs_values,
                  block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-                 rp_qrcs_values, leverage_shap_values, improved_shapley_values,
+                 stratified_values, leverage_shap_values, improved_shapley_values,
                  time_results, kpi_results)
     """
     # Load data
@@ -1260,7 +1260,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             'block_qrcs': cached_data['block_qrcs_values'],
             'improved_qrcs': cached_data['improved_qrcs_values'],
             'improved_block_qrcs': cached_data['improved_block_qrcs_values'],
-            'rp_qrcs': cached_data.get('rp_qrcs_values', {}),
+            'stratified': cached_data.get('stratified_values', {}),
             'leverage_shap': cached_data.get('leverage_shap_values', {}),
         }
         time_results = cached_data['time_results']
@@ -1366,7 +1366,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             block_qrcs_values=all_values['block_qrcs'],
             improved_qrcs_values=all_values['improved_qrcs'],
             improved_block_qrcs_values=all_values['improved_block_qrcs'],
-            rp_qrcs_values=all_values['rp_qrcs'],
+            stratified_values=all_values['stratified'],
             leverage_shap_values=all_values['leverage_shap'],
             improved_shapley_values=improved_shapley_values,
             time_results=time_results,
@@ -1389,7 +1389,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
         all_values['block_qrcs'],
         all_values['improved_qrcs'],
         all_values['improved_block_qrcs'],
-        all_values['rp_qrcs'],
+        all_values['stratified'],
         all_values['leverage_shap'],
         improved_shapley_values,
         time_results,
@@ -1493,7 +1493,7 @@ Examples:
     print("\nRunning benchmark...")
     (shapley_values, cis_values, random_cs_values, qrcs_values,
      block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-     rp_qrcs_values, leverage_shap_values, improved_shapley_values,
+     stratified_values, leverage_shap_values, improved_shapley_values,
      time_results, results) = benchmark_feature_importance(
         reader,
         model,
@@ -1516,7 +1516,7 @@ Examples:
     print("Block QR-CS values:", block_qrcs_values)
     print("Improved QR-CS values:", improved_qrcs_values)
     print("Improved Block QR-CS values:", improved_block_qrcs_values)
-    print("RP-QRCS values:", rp_qrcs_values)
+    print("RP-QRCS values:", stratified_values)
     print("Leverage SHAP values:", leverage_shap_values)
     if improved_shapley_values:
         print("\nImproved graph Shapley values:")

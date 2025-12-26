@@ -1,4 +1,4 @@
-"""Benchmark script comparing different parameter configurations of RPQRCSExplainer.
+"""Benchmark script comparing different parameter configurations of StratifiedShapleyExplainer.
 
 This script tests various combinations of:
 - allocation_strategy: 'shapley_weighted', 'uniform', 'leverage', 'leverage_bernoulli'
@@ -32,7 +32,7 @@ import seaborn as sns
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname('.'), '..')))
 
 from shapG import GraphBuilder
-from shapG.explainer import RPQRCSExplainer, ExactExplainer
+from shapG.explainer import StratifiedShapleyExplainer, ExactExplainer
 from shapG.characteristic import GraphModelCharacteristic
 
 # Optional plotting style (consistent with benchmark_qr_new_api.py)
@@ -113,7 +113,7 @@ def _get_cache_filename(dataset, imputation_strategy='mean', retrain_kpi=False):
     """
     output_dir = _ensure_output_dir()
     kpi_mode = "retrain" if retrain_kpi else "mask"
-    cache_filename = f"rp_qrcs_{dataset}_cache_{imputation_strategy}_{kpi_mode}.pkl"
+    cache_filename = f"stratified_{dataset}_cache_{imputation_strategy}_{kpi_mode}.pkl"
     return str(output_dir / cache_filename)
 
 
@@ -266,7 +266,7 @@ def _generate_config_name(config):
     return f"{strategy}_{estimation}_{n_samples}s"
 
 
-def benchmark_rp_qrcs_configurations(reader, model, dataset, compute_exact=True,
+def benchmark_stratified_configurations(reader, model, dataset, compute_exact=True,
                                      imputation_strategy='mean', use_cache=True,
                                      retrain_kpi=False):
     """
@@ -372,7 +372,7 @@ def benchmark_rp_qrcs_configurations(reader, model, dataset, compute_exact=True,
         start_time = time.time()
 
         try:
-            explainer = RPQRCSExplainer(
+            explainer = StratifiedShapleyExplainer(
                 characteristic_function=custom_char_func,
                 verbose=True,
                 **config
@@ -446,7 +446,7 @@ def export_results_csv(results, output_dir=None):
     df = pd.DataFrame(data)
 
     # Save to CSV
-    csv_path = output_dir / f"rp_qrcs_benchmark_{dataset}.csv"
+    csv_path = output_dir / f"stratified_benchmark_{dataset}.csv"
     df.to_csv(csv_path, index=False)
     print(f"\nSaved benchmark results to: {csv_path}")
 
@@ -502,7 +502,7 @@ def plot_error_comparison(results, output_dir=None):
     plt.tight_layout()
 
     # Save plot
-    plot_path = output_dir / f"rp_qrcs_error_comparison_{dataset}.pdf"
+    plot_path = output_dir / f"stratified_error_comparison_{dataset}.pdf"
     plt.savefig(plot_path, bbox_inches='tight', dpi=PLOT_DPI)
     print(f"Saved error comparison plot to: {plot_path}")
 
@@ -553,7 +553,7 @@ def plot_time_comparison(results, output_dir=None):
     plt.tight_layout()
 
     # Save plot
-    plot_path = output_dir / f"rp_qrcs_time_comparison_{dataset}.pdf"
+    plot_path = output_dir / f"stratified_time_comparison_{dataset}.pdf"
     plt.savefig(plot_path, bbox_inches='tight', dpi=PLOT_DPI)
     print(f"Saved time comparison plot to: {plot_path}")
 
@@ -798,7 +798,7 @@ def plot_kpi_comparison(reader, results, model, dataset, limit=10,
     plt.grid()
 
     # Save plot
-    plot_path = output_dir / f"rp_qrcs_kpi_{dataset}_{imputation_strategy}.pdf"
+    plot_path = output_dir / f"stratified_kpi_{dataset}_{imputation_strategy}.pdf"
     plt.savefig(plot_path, bbox_inches='tight', dpi=PLOT_DPI)
     print(f"Saved KPI comparison plot to: {plot_path}")
 
@@ -977,7 +977,7 @@ if __name__ == "__main__":
         print(f"  Task: Classification (Accuracy metric)")
 
     # Run benchmark
-    results = benchmark_rp_qrcs_configurations(
+    results = benchmark_stratified_configurations(
         reader=reader,
         model=model,
         dataset=args.dataset,
@@ -1043,7 +1043,7 @@ if __name__ == "__main__":
                     kpi_csv_data[f'Metric_{i}'].append('')
 
         kpi_df = pd.DataFrame(kpi_csv_data)
-        kpi_csv_path = OUTPUT_DIR / f"rp_qrcs_kpi_metrics_{args.dataset}_{args.imputation}.csv"
+        kpi_csv_path = OUTPUT_DIR / f"stratified_kpi_metrics_{args.dataset}_{args.imputation}.csv"
         kpi_df.to_csv(kpi_csv_path, index=False)
         print(f"Saved KPI metrics to: {kpi_csv_path}")
 

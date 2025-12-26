@@ -805,7 +805,7 @@ class L1Solver:
 # Main Explainer Class
 # =============================================================================
 
-class RPQRCSExplainer(Explainer):
+class StratifiedShapleyExplainer(Explainer):
     """
     Random Projection QRCS Shapley value explainer.
 
@@ -857,10 +857,10 @@ class RPQRCSExplainer(Explainer):
 
     Examples
     --------
-    >>> from shapG import RPQRCSExplainer, CoalitionDegree
+    >>> from shapG import StratifiedShapleyExplainer, CoalitionDegree
     >>> import networkx as nx
     >>> G = nx.erdos_renyi_graph(20, 0.3)
-    >>> explainer = RPQRCSExplainer(
+    >>> explainer = StratifiedShapleyExplainer(
     ...     characteristic_function=CoalitionDegree(),
     ...     n_samples=5000,
     ...     verbose=True
@@ -952,7 +952,7 @@ class RPQRCSExplainer(Explainer):
         X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
         context: Optional[Any] = None,
         **kwargs
-    ) -> 'RPQRCSExplainer':
+    ) -> 'StratifiedShapleyExplainer':
         """
         Fit the explainer to data.
 

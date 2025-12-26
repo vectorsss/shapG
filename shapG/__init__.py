@@ -57,7 +57,7 @@ from .explainer import (
     ImprovedBlockQRCSExplainer,
     LeverageScoreExplainer,
     MultilinearExplainer,
-    RPQRCSExplainer
+    StratifiedShapleyExplainer
 )
 
 from .characteristic import (
@@ -115,7 +115,7 @@ __all__ = [
     'ImprovedBlockQRCSExplainer',
     'LeverageScoreExplainer',
     'MultilinearExplainer',
-    'RPQRCSExplainer',
+    'StratifiedShapleyExplainer',
 
     # New API - Characteristic functions
     'CoalitionDegree',
