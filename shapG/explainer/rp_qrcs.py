@@ -1,4 +1,4 @@
-shapG/explainer/rp_qrcs.py"""
+"""
 Random Projection QRCS (RP-QRCS) Shapley value computation.
 
 This module implements an improved QRCS algorithm that addresses the coalition
@@ -557,89 +557,6 @@ class StratifiedCoalitionSampler:
 
 
 # =============================================================================
-# Random Projection Matrix
-# =============================================================================
-
-class RandomProjectionMatrix:
-    """
-    Random projection matrix for compressed sensing.
-
-    Supports multiple projection types that satisfy RIP (Restricted Isometry Property):
-    - Gaussian: entries ~ N(0, 1/l)
-    - Bernoulli: entries ~ {-1/sqrt(l), +1/sqrt(l)}
-    - Sparse: sparse random projections
-
-    Parameters
-    ----------
-    n_measurements : int
-        Number of measurements (rows)
-    n_signals : int
-        Signal dimension (columns)
-    projection_type : str
-        Type of random projection: 'gaussian', 'bernoulli', or 'sparse'
-    sparsity : float
-        For sparse projections, fraction of non-zero entries per column
-    seed : int, optional
-        Random seed for reproducibility
-    """
-
-    def __init__(
-        self,
-        n_measurements: int,
-        n_signals: int,
-        projection_type: str = 'gaussian',
-        sparsity: float = 0.1,
-        seed: Optional[int] = None
-    ):
-        self.l = n_measurements
-        self.m = n_signals
-        self.projection_type = projection_type
-        self.sparsity = sparsity
-        self.rng = np.random.default_rng(seed)
-
-        self.matrix = self._build_matrix()
-
-    def _build_matrix(self) -> np.ndarray:
-        """Build the random projection matrix."""
-        l, m = self.l, self.m
-
-        if self.projection_type == 'gaussian':
-            # Gaussian random matrix with proper scaling
-            Phi = self.rng.standard_normal((l, m))
-            Phi /= sqrt(l)
-
-        elif self.projection_type == 'bernoulli':
-            # Bernoulli ±1 random matrix
-            Phi = self.rng.choice([-1.0, 1.0], size=(l, m))
-            Phi /= sqrt(l)
-
-        elif self.projection_type == 'sparse':
-            # Sparse random projection (Achlioptas, 2003)
-            Phi = np.zeros((l, m))
-            n_nonzero = max(1, int(l * self.sparsity))
-
-            for j in range(m):
-                # Random positions for non-zero entries
-                positions = self.rng.choice(l, size=n_nonzero, replace=False)
-                # Random signs
-                signs = self.rng.choice([-1.0, 1.0], size=n_nonzero)
-                Phi[positions, j] = signs / sqrt(n_nonzero)
-
-        else:
-            raise ValueError(f"Unknown projection type: {self.projection_type}")
-
-        return Phi
-
-    def project(self, signal: np.ndarray) -> np.ndarray:
-        """Project signal to lower dimension."""
-        return self.matrix @ signal
-
-    def __matmul__(self, other: np.ndarray) -> np.ndarray:
-        """Matrix multiplication operator."""
-        return self.matrix @ other
-
-
-# =============================================================================
 # Implicit DCT Operator for Large Spaces
 # =============================================================================
 
@@ -921,12 +838,6 @@ class RPQRCSExplainer(Explainer):
         Function to compute coalition values
     n_samples : int, default=5000
         Total number of coalitions to sample
-    n_measurements : int, optional
-        Number of compressed measurements (auto-computed if None)
-    measurement_ratio : float, default=0.2
-        Ratio of measurements to samples (used if n_measurements is None)
-    projection_type : str, default='gaussian'
-        Type of random projection: 'gaussian', 'bernoulli', or 'sparse'
     allocation_strategy : str, default='shapley_weighted'
         How to allocate samples across coalition sizes:
         - 'shapley_weighted': Proportional to Shapley weight × coalition count (recommended)
@@ -961,9 +872,6 @@ class RPQRCSExplainer(Explainer):
         self,
         characteristic_function: Optional[CharacteristicFunction] = None,
         n_samples: int = 5000,
-        n_measurements: Optional[int] = None,
-        measurement_ratio: float = 0.2,
-        projection_type: str = 'gaussian',
         allocation_strategy: str = 'shapley_weighted',
         tolerance: float = 1e-4,
         use_direct_estimation: bool = True,
@@ -973,9 +881,6 @@ class RPQRCSExplainer(Explainer):
         super().__init__(characteristic_function or CoalitionDegree(), verbose)
 
         self.n_samples = n_samples
-        self.n_measurements = n_measurements
-        self.measurement_ratio = measurement_ratio
-        self.projection_type = projection_type
         self.allocation_strategy = allocation_strategy
         self.tolerance = tolerance
         self.use_direct_estimation = use_direct_estimation
@@ -1082,10 +987,8 @@ class RPQRCSExplainer(Explainer):
             print(f"RP-QRCS Explainer fitted:")
             print(f"  n_players: {self.n}")
             print(f"  n_samples: {self.n_samples}")
-            print(f"  projection_type: {self.projection_type}")
             print(f"  allocation_strategy: {self.allocation_strategy}")
             print(f"\nSampling allocation:")
-            stats = self._sampler.get_stats()
             if self._sampler.allocations is not None:
                 for s in range(self.n):
                     if self._sampler.allocations[s] > 0:
@@ -1161,6 +1064,14 @@ class RPQRCSExplainer(Explainer):
             # Step 1: Sample coalitions using stratified sampling
             if self.allocation_strategy == 'leverage_bernoulli':
                 coalitions, sizes, weights = self._sampler.sample_all_strata_bernoulli(player)
+
+                # Print actual allocation after first player's sampling
+                if player == 0 and self.verbose and self._sampler._actual_samples_by_size is not None:
+                    print(f"\nActual sampling allocation (leverage_bernoulli):")
+                    for s in range(self.n):
+                        if self._sampler._actual_samples_by_size[s] > 0:
+                            print(f"    size {s}: {int(self._sampler._actual_samples_by_size[s])} samples")
+                    print()
             else:
                 coalitions, sizes, weights = self._sampler.sample_all_strata(player)
             m = len(coalitions)
@@ -1212,29 +1123,6 @@ class RPQRCSExplainer(Explainer):
 
         return shapley_values
 
-    def _coalition_to_index(self, coalition: Set[int], player: int) -> int:
-        """
-        Convert coalition to index in full signal space [0, 2^(n-1) - 1].
-
-        Parameters
-        ----------
-        coalition : Set[int]
-            Coalition excluding target player
-        player : int
-            Target player index
-
-        Returns
-        -------
-        index : int
-            Index in [0, 2^(n-1) - 1]
-        """
-        other_players = [i for i in range(self.n) if i != player]
-        index = 0
-        for i, p in enumerate(other_players):
-            if p in coalition:
-                index |= (1 << i)
-        return index
-
     def _compute_with_cs_implicit(
         self,
         coalitions: List[Set[int]],
@@ -1245,16 +1133,13 @@ class RPQRCSExplainer(Explainer):
         """
         Compute Shapley value using compressed sensing with implicit DCT.
 
-        This properly implements CS by:
-        1. Measuring only m sampled coalitions
-        2. Using implicit DCT operator (no full matrix storage)
-        3. Reconstructing DCT coefficients via L1 minimization
-        4. Computing Shapley value either via:
-           - Full IDCT reconstruction (small spaces)
-           - Sparse DCT-domain computation (large spaces)
+        Uses budget-based stratified CS which:
+        1. Measures only m sampled coalitions
+        2. Uses implicit DCT operator in O(m) budget space (not O(2^n))
+        3. Reconstructs via L1 minimization
+        4. Computes Shapley value using stratified structure
 
-        For very large spaces where even L1 solving is infeasible,
-        falls back to direct estimation.
+        Falls back to direct estimation if CS fails.
 
         Parameters
         ----------
@@ -1273,34 +1158,24 @@ class RPQRCSExplainer(Explainer):
             Shapley value for the player
         """
         m = len(coalitions)
-        n_bits = self.n - 1
-        full_size = 2 ** n_bits
 
-        # Memory thresholds based on practical constraints
-        # L1 solver (ISTA) needs multiple arrays of full_size
-        # ~500MB limit => ~16M elements at 8 bytes * 4 arrays
-        MAX_L1_SIZE = 1024 # ~24 players
-        
         if self.verbose:
+            n_bits = self.n - 1
+            full_size = 2 ** n_bits
             print(f"  [CS] Full space: 2^{n_bits} = {full_size}")
             print(f"  [CS] Sampled: {m} coalitions ({100*m/full_size:.4f}%)")
+            print(f"  [CS] Using budget-based stratified CS (O(m) space)")
 
-        # For very large spaces, fall back to budget-based stratified CS
-        if full_size > MAX_L1_SIZE:
-            if self.verbose:
-                print(f"  [CS] Space too large for full reconstruction.")
-                print(f"  [CS] Using budget-based stratified CS.")
-                try:
-                    return self._compute_with_cs_stratified_budget(
-                        coalitions, player, utility_func, l1_solver
-                    )
-
-                except Exception as e:
-                    warnings.warn(
-                        f"CS reconstruction failed: {e}. Falling back to direct estimation.",
-                        RuntimeWarning
-                    )
-                    return self._compute_direct_from_coalitions(coalitions, player, utility_func)
+        try:
+            return self._compute_with_cs_stratified_budget(
+                coalitions, player, utility_func, l1_solver
+            )
+        except Exception as e:
+            warnings.warn(
+                f"CS reconstruction failed: {e}. Falling back to direct estimation.",
+                RuntimeWarning
+            )
+            return self._compute_direct_from_coalitions(coalitions, player, utility_func)
 
     def _compute_cs_oversampling_factors(
         self,
@@ -1540,181 +1415,6 @@ class RPQRCSExplainer(Explainer):
             shapley_value += shapley_weight * n_coalitions * size_mean
 
         return shapley_value
-
-    def _compute_shapley_from_sparse_dct(
-        self,
-        s_hat: np.ndarray,
-        sparsity_threshold: float = 1e-10
-    ) -> float:
-        """
-        Compute Shapley value directly from sparse DCT coefficients.
-
-        Uses the identity:
-            φ = w^T @ u = w^T @ IDCT(s) = (DCT(w))^T @ s
-
-        For K-sparse s_hat, we only need DCT(w)[j] at K positions.
-
-        Key insight: w[k] = shapley_weight[popcount(k)] has only n distinct
-        values. This allows efficient computation of DCT(w)[j] using
-        elementary symmetric polynomials in O(n²) time per coefficient.
-
-        Total complexity: O(K × n²) instead of O(2^n).
-
-        Parameters
-        ----------
-        s_hat : np.ndarray
-            DCT coefficients from L1 minimization
-        sparsity_threshold : float
-            Threshold for considering a coefficient as zero
-
-        Returns
-        -------
-        float
-            Shapley value
-        """
-        n_bits = self.n - 1
-        N = len(s_hat)  # Should be 2^n_bits
-
-        # Get sparse support (indices where |s_hat| > threshold)
-        support = np.where(np.abs(s_hat) > sparsity_threshold)[0]
-        K = len(support)
-
-        if K == 0:
-            return 0.0
-
-        if self.verbose:
-            print(f"  [Sparse DCT] {K} non-zero coefficients "
-                  f"(sparsity: {100*(1-K/N):.2f}%)")
-
-        # Shapley weights for each coalition size (0 to n-1)
-        shapley_weights = self._sampler.shapley_weights
-
-        # Compute φ = Σ_{j ∈ support} s_hat[j] * DCT(w)[j]
-        shapley_value = 0.0
-
-        for j in support:
-            dct_w_j = self._compute_dct_shapley_weight_at_j(
-                j, n_bits, N, shapley_weights
-            )
-            shapley_value += s_hat[j] * dct_w_j
-
-        return shapley_value
-
-    def _compute_dct_shapley_weight_at_j(
-        self,
-        j: int,
-        n_bits: int,
-        N: int,
-        shapley_weights: np.ndarray
-    ) -> float:
-        """
-        Compute DCT(w)[j] where w is the Shapley weight vector.
-
-        The Shapley weight vector w has special structure:
-            w[k] = shapley_weight[popcount(k)]
-
-        This allows efficient computation using elementary symmetric polynomials.
-
-        Mathematical derivation:
-            DCT(w)[j] = α[j] × Σ_k w[k] × cos(π×j×(2k+1)/(2N))
-
-        Since w[k] only depends on popcount(k), we can group by coalition size:
-            = α[j] × Σ_s w_s × Σ_{k: popcount(k)=s} cos(π×j×(2k+1)/(2N))
-
-        The inner sum is related to elementary symmetric polynomials:
-            Σ_{k: popcount(k)=s} ω^k = e_s(z_0, z_1, ..., z_{n-2})
-
-        where:
-            - ω = exp(i×π×j/N)
-            - z_m = ω^{2^m}
-            - e_s is the s-th elementary symmetric polynomial
-
-        The generating function Π_m (1 + t×z_m) = Σ_s e_s × t^s can be
-        computed in O(n²) via polynomial multiplication.
-
-        Parameters
-        ----------
-        j : int
-            Frequency index (0 to N-1)
-        n_bits : int
-            Number of bits in coalition index (n - 1)
-        N : int
-            Full space size (2^n_bits)
-        shapley_weights : np.ndarray
-            Shapley weights indexed by coalition size (length n)
-
-        Returns
-        -------
-        float
-            Value of DCT(w)[j]
-        """
-        # Handle edge case: n_bits = 0 means only 1 player
-        if n_bits == 0:
-            # Only one coalition (empty), weight is shapley_weights[0]
-            return shapley_weights[0] / np.sqrt(N)
-
-        # DCT-II normalization factor (orthonormal)
-        if j == 0:
-            alpha = 1.0 / np.sqrt(N)
-        else:
-            alpha = np.sqrt(2.0 / N)
-
-        # Special case: j = 0
-        # All z_m = 1, so e_s = C(n_bits, s)
-        if j == 0:
-            # DCT(w)[0] = (1/√N) × Σ_s w_s × C(n_bits, s)
-            # By Shapley weight normalization, this sum equals 1
-            total = sum(
-                shapley_weights[s] * comb(n_bits, s, exact=True)
-                for s in range(n_bits + 1)
-            )
-            return alpha * total
-
-        # General case: j > 0
-        # ω = exp(i × π × j / N)
-        omega = np.exp(1j * np.pi * j / N)
-
-        # Phase factor for (2k+1) term: exp(i × π × j / (2N))
-        phase = np.exp(1j * np.pi * j / (2 * N))
-
-        # Compute z_m = ω^{2^m} for each bit position m = 0, ..., n_bits-1
-        z = np.zeros(n_bits, dtype=complex)
-        power = 1
-        for m in range(n_bits):
-            z[m] = omega ** power
-            power <<= 1  # power *= 2
-
-        # Compute elementary symmetric polynomials via polynomial multiplication
-        # P(t) = Π_{m=0}^{n_bits-1} (1 + t × z[m])
-        # P(t) = Σ_{s=0}^{n_bits} e_s × t^s
-        # Coefficient poly[s] = e_s(z_0, ..., z_{n_bits-1})
-
-        # Initialize: P(t) = 1 (constant polynomial)
-        poly = np.array([1.0 + 0j])
-
-        for m in range(n_bits):
-            # Multiply P(t) by (1 + t × z[m])
-            # If P(t) = Σ_k a_k t^k, then
-            # P(t) × (1 + t×z) = Σ_k a_k t^k + Σ_k a_k×z t^{k+1}
-            new_poly = np.zeros(len(poly) + 1, dtype=complex)
-            new_poly[:len(poly)] = poly  # Contribution from "1"
-            new_poly[1:len(poly) + 1] += z[m] * poly  # Contribution from "t×z[m]"
-            poly = new_poly
-
-        # poly[s] = e_s = Σ_{|S|=s} Π_{m∈S} z_m
-        #         = Σ_{k: popcount(k)=s} ω^k
-
-        # DCT(w)[j] = α × Σ_s w_s × Re(phase × e_s)
-        # where Re(phase × e_s) = Σ_{k: popcount(k)=s} cos(π×j×(2k+1)/(2N))
-
-        result = 0.0
-        for s in range(n_bits + 1):
-            e_s = poly[s]
-            # B_s(j) = Re(phase × e_s)
-            B_s_j = np.real(phase * e_s)
-            result += shapley_weights[s] * B_s_j
-
-        return alpha * result
 
     def get_sampling_stats(self) -> Optional[SamplingStats]:
         """Get statistics about the sampling configuration."""

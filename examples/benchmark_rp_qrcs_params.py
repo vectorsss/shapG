@@ -4,8 +4,6 @@ This script tests various combinations of:
 - allocation_strategy: 'shapley_weighted', 'uniform', 'leverage', 'leverage_bernoulli'
 - use_direct_estimation: True (direct weighted estimation) vs False (CS reconstruction)
 - n_samples: Different sample budgets
-- measurement_ratio: Different ratios of measurements to samples
-- projection_type: 'gaussian', 'bernoulli', 'sparse'
 """
 
 # ==============================================================================
@@ -52,14 +50,11 @@ OUTPUT_DIR = Path("output")
 CACHE_ENABLED = True
 
 # Configurations to test
-ALLOCATION_STRATEGIES = ['leverage_bernoulli', 'shapley_weighted']
-#ALLOCATION_STRATEGIES = ['shapley_weighted', 'leverage', 'leverage_bernoulli']
-# USE_DIRECT_ESTIMATIONS = [True, False]
+# ALLOCATION_STRATEGIES = ['leverage_bernoulli']
+ALLOCATION_STRATEGIES = ['shapley_weighted', 'leverage', 'leverage_bernoulli']
+# USE_DIRECT_ESTIMATIONS = [False]
 USE_DIRECT_ESTIMATIONS = [True, False]
-N_SAMPLES_OPTIONS = [300]
-MEASUREMENT_RATIOS = [0.1]
-PROJECTION_TYPES = ['gaussian', 'sparse', 'bernoulli']  # Can add 'bernoulli', 'sparse' if needed
-#PROJECTION_TYPES = ['gaussian'] # Can add 'bernoulli', 'sparse' if needed
+N_SAMPLES_OPTIONS = [50]
 
 # Fixed parameters
 SEED = 42
@@ -268,15 +263,7 @@ def _generate_config_name(config):
     strategy = config['allocation_strategy']
     estimation = 'direct' if config['use_direct_estimation'] else 'cs'
     n_samples = config['n_samples']
-    ratio = config.get('measurement_ratio', 0.2)
-
-    if config['use_direct_estimation']:
-        # Direct estimation: projection_type is not used, omit from name
-        return f"{strategy}_{estimation}_{n_samples}s"
-    else:
-        # CS: include projection type
-        proj = config.get('projection_type', 'gaussian')[:4]  # Abbreviate
-        return f"{strategy}_{estimation}_{n_samples}s_r{ratio}_{proj}"
+    return f"{strategy}_{estimation}_{n_samples}s"
 
 
 def benchmark_rp_qrcs_configurations(reader, model, dataset, compute_exact=True,
@@ -347,38 +334,20 @@ def benchmark_rp_qrcs_configurations(reader, model, dataset, compute_exact=True,
     print("=" * 80)
 
     configs = []
-    for strategy, direct, n_samples, ratio in product(
+    for strategy, direct, n_samples in product(
         ALLOCATION_STRATEGIES,
         USE_DIRECT_ESTIMATIONS,
-        N_SAMPLES_OPTIONS,
-        MEASUREMENT_RATIOS
+        N_SAMPLES_OPTIONS
     ):
-        if direct:
-            # Direct estimation: projection_type doesn't matter, use only one
-            config = {
-                'allocation_strategy': strategy,
-                'use_direct_estimation': direct,
-                'n_samples': n_samples,
-                'measurement_ratio': ratio,
-                'projection_type': PROJECTION_TYPES[0],  # Doesn't matter for direct
-                'seed': SEED
-            }
-            configs.append(config)
-        else:
-            # CS reconstruction: test all projection types
-            for proj in PROJECTION_TYPES:
-                config = {
-                    'allocation_strategy': strategy,
-                    'use_direct_estimation': direct,
-                    'n_samples': n_samples,
-                    'measurement_ratio': ratio,
-                    'projection_type': proj,
-                    'seed': SEED
-                }
-                configs.append(config)
+        config = {
+            'allocation_strategy': strategy,
+            'use_direct_estimation': direct,
+            'n_samples': n_samples,
+            'seed': SEED
+        }
+        configs.append(config)
 
     print(f"Total configurations to test: {len(configs)}")
-    print(f"  (Direct estimation configs use single projection type since it's not used)")
 
     # Test all configurations
     print("\n" + "=" * 80)
@@ -470,8 +439,6 @@ def export_results_csv(results, output_dir=None):
         'Estimation Method': ['Direct' if c['use_direct_estimation'] else 'CS'
                              for c in results['configs']],
         'N Samples': [c['n_samples'] for c in results['configs']],
-        'Measurement Ratio': [c.get('measurement_ratio', 0.2) for c in results['configs']],
-        'Projection Type': [c.get('projection_type', 'gaussian') for c in results['configs']],
         'Time (s)': results['times'],
         'L2 Error': results['errors']
     }
@@ -998,8 +965,6 @@ if __name__ == "__main__":
     print(f"  Allocation strategies: {ALLOCATION_STRATEGIES}")
     print(f"  Estimation methods: Direct vs CS")
     print(f"  Sample budgets: {N_SAMPLES_OPTIONS}")
-    print(f"  Measurement ratios: {MEASUREMENT_RATIOS}")
-    print(f"  Projection types: {PROJECTION_TYPES}")
 
     # Select dataset and model
     if args.dataset == 'housing':
