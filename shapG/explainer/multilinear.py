@@ -20,7 +20,6 @@ References:
 
 from typing import Dict, Union, Optional, Set, List, Callable, Tuple
 from dataclasses import dataclass
-from itertools import combinations
 from math import factorial, sqrt, log
 import numpy as np
 import pandas as pd
@@ -340,8 +339,6 @@ class MultilinearExplainer(Explainer):
     ----------
     characteristic_function : callable, optional
         Function v(S, context) -> float for coalition S
-    max_exact_size : int, default=10
-        Maximum number of players for exact (non-sampled) computation
     n_quadrature : int, default=21
         Number of quadrature points for Simpson's rule (odd preferred)
     n_samples : int, default=100
@@ -358,6 +355,11 @@ class MultilinearExplainer(Explainer):
     verbose : bool, default=False
         Whether to print progress information
 
+    Note
+    ----
+    For exact Shapley value computation, use ExactExplainer instead.
+    MultilinearExplainer is designed for approximation via sampling.
+
     References
     ----------
     [1] Owen, G. (1972). Multilinear Extensions of Games.
@@ -368,7 +370,6 @@ class MultilinearExplainer(Explainer):
     def __init__(
         self,
         characteristic_function: Optional[CharacteristicFunction] = None,
-        max_exact_size: int = 10,
         n_quadrature: int = 21,
         n_samples: int = 100,
         use_leverage: bool = True,
@@ -379,8 +380,6 @@ class MultilinearExplainer(Explainer):
     ):
         super().__init__(characteristic_function, verbose)
 
-        if max_exact_size <= 0:
-            raise ValueError(f"max_exact_size must be positive, got {max_exact_size}")
         if n_quadrature < 3:
             raise ValueError(f"n_quadrature must be >= 3, got {n_quadrature}")
         if n_samples <= 0:
@@ -388,7 +387,6 @@ class MultilinearExplainer(Explainer):
         if not 0 < confidence < 1:
             raise ValueError(f"confidence must be in (0, 1), got {confidence}")
 
-        self.max_exact_size = max_exact_size
         self.n_quadrature = n_quadrature if n_quadrature % 2 == 1 else n_quadrature + 1
         self.n_samples = n_samples
         self.use_leverage = use_leverage
@@ -486,19 +484,14 @@ class MultilinearExplainer(Explainer):
             print(f"  n={n}, n_quadrature={self.n_quadrature}, n_samples={self.n_samples}")
             print(f"  use_leverage={self.use_leverage}")
 
-        # Choose method based on problem size
-        if n <= self.max_exact_size:
-            shapley_array, total_variance = self._compute_shapley_exact(cached_char_func, n)
-            self.method_used_ = 'exact'
-            self.leverage_efficiency_ = 1.0
-        else:
-            shapley_array, total_variance = self._compute_shapley_sampled(cached_char_func, n)
-            self.method_used_ = 'leverage_sampling' if self.use_leverage else 'naive_sampling'
+        # Always use sampled method (for exact computation, use ExactExplainer)
+        shapley_array, total_variance = self._compute_shapley_sampled(cached_char_func, n)
+        self.method_used_ = 'leverage_sampling' if self.use_leverage else 'naive_sampling'
 
         self.computation_time_ = time.time() - start_time
 
         # Compute error bounds if requested
-        if self.compute_error_bounds and n > self.max_exact_size:
+        if self.compute_error_bounds:
             error_computer = _ErrorBoundComputer(
                 n, self.n_quadrature, self.n_samples, self.confidence
             )
@@ -519,7 +512,7 @@ class MultilinearExplainer(Explainer):
             print(f"  Method: {self.method_used_}")
             print(f"  Time: {self.computation_time_:.3f}s")
             print(f"  Char. function calls: {self.n_char_func_calls_}")
-            if self.use_leverage and n > self.max_exact_size:
+            if self.use_leverage:
                 print(f"  Leverage efficiency: {self.leverage_efficiency_:.2f}x")
             if self.error_bounds_:
                 print(f"  Error bound: {self.error_bounds_.total_error:.2e} "
@@ -530,62 +523,6 @@ class MultilinearExplainer(Explainer):
     # =========================================================================
     # Core Computation Methods
     # =========================================================================
-
-    def _compute_shapley_exact(
-        self,
-        char_func: Callable[[Set[int]], float],
-        n: int
-    ) -> Tuple[np.ndarray, float]:
-        """
-        Compute exact Shapley values using Owen's diagonal integration.
-
-        Complexity: O(n × n_quadrature × 2^(n-1))
-
-        Returns:
-            (shapley_values, total_variance)
-        """
-        shapley_values = np.zeros(n)
-        t_values = np.linspace(0, 1, self.n_quadrature)
-
-        for i in range(n):
-            f_values = np.zeros(self.n_quadrature)
-            for k, t in enumerate(t_values):
-                f_values[k] = self._partial_derivative_exact(char_func, i, t, n)
-            shapley_values[i] = simpson(f_values, x=t_values)
-
-        return shapley_values, 0.0  # No variance for exact computation
-
-    def _partial_derivative_exact(
-        self,
-        char_func: Callable[[Set[int]], float],
-        i: int,
-        t: float,
-        n: int
-    ) -> float:
-        """
-        Exact computation of partial derivative f_i(t, t, ..., t).
-
-        From Owen's equation (8):
-        f_i(x) = Σ_{S⊄i} [∏_{j∈S} x_j · ∏_{j∉S∪{i}} (1-x_j)] · [v(S∪{i}) - v(S)]
-
-        Complexity: O(2^(n-1))
-        """
-        total = 0.0
-        other_players = [j for j in range(n) if j != i]
-
-        for size in range(len(other_players) + 1):
-            for coalition in combinations(other_players, size):
-                coalition_set = set(coalition)
-                coalition_with_i = coalition_set | {i}
-
-                # Probability: t^|S| * (1-t)^(n-1-|S|)
-                prob = (t ** size) * ((1 - t) ** (len(other_players) - size))
-
-                # Marginal contribution
-                marginal = char_func(coalition_with_i) - char_func(coalition_set)
-                total += prob * marginal
-
-        return total
 
     def _compute_shapley_sampled(
         self,
@@ -692,14 +629,13 @@ class MultilinearExplainer(Explainer):
             'n_features': self.n_features_,
             'n_quadrature': self.n_quadrature,
             'n_samples': self.n_samples,
-            'max_exact_size': self.max_exact_size,
             'method_used': self.method_used_,
             'use_leverage': self.use_leverage,
             'computation_time': self.computation_time_,
             'n_char_func_calls': self.n_char_func_calls_,
         }
 
-        if self.use_leverage and self.method_used_ != 'exact':
+        if self.use_leverage:
             stats['leverage_efficiency'] = self.leverage_efficiency_
 
         return stats
