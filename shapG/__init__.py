@@ -40,7 +40,7 @@ plot(shapley_values, top_n=10)
 ```
 """
 
-__version__ = '0.13.5'
+__version__ = '0.13.8'
 
 # New modular API imports
 from .explainer import (

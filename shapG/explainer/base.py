@@ -35,7 +35,7 @@ class CharacteristicFunction(ABC):
         Returns:
             The characteristic value of the coalition
         """
-        pass
+        raise NotImplementedError
 
     def batch_compute(self, coalitions: List[Set[int]], context: Optional[Any] = None) -> np.ndarray:
         """Compute values for multiple coalitions.
@@ -80,7 +80,7 @@ class Explainer(ABC):
         Returns:
             Self for method chaining
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def explain(
@@ -97,7 +97,7 @@ class Explainer(ABC):
         Returns:
             Dictionary mapping feature indices to importance scores
         """
-        pass
+        raise NotImplementedError
 
     def fit_explain(
         self,

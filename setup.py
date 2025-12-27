@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="shapG",
-    version="0.13.5",
+    version="0.13.8",
     packages=find_packages(),
     install_requires=[
         "networkx",
