@@ -120,17 +120,23 @@ IMPROVED_QRCS_CONFIG = {
     'auto_adapt': True,
 }
 
-STRATIFIED_CONFIG = {
+STRATIFIED_DIRECT_CONFIG = {
     'n_samples': 50,                      # Total coalition samples
     'allocation_strategy': 'leverage_bernoulli',  # 'shapley_weighted', 'uniform', or 'leverage'
-    'use_direct_estimation': True,          # Use direct weighted estimation (True) or CS reconstruction (False)
+    'use_direct_estimation': True,          # Use direct weighted estimation
+    'seed': 42,
+}
+
+STRATIFIED_CS_CONFIG = {
+    'n_samples': 50,                      # Total coalition samples
+    'allocation_strategy': 'leverage_bernoulli',  # 'shapley_weighted', 'uniform', or 'leverage'
+    'use_direct_estimation': False,         # Use CS reconstruction
     'seed': 42,
 }
 
 MULTILINEAR_CONFIG = {
-    'max_exact_size': 10,
-    'n_quadrature': 21,      # Quadrature points for integration (odd number preferred)
-    'n_samples': 100,        # Samples per quadrature point for partial derivative estimation
+    'n_quadrature': 11,      # Quadrature points for integration (odd number preferred)
+    'n_samples': 50,        # Samples per quadrature point for partial derivative estimation
     'use_leverage': True,    # Use leverage-stratified sampling (LEM)
     'compute_error_bounds': True,  # Compute rigorous error bounds
     'confidence': 0.95,      # Confidence level for error bounds
@@ -925,29 +931,49 @@ def _compute_all_explainers(G, custom_char_func, X):
         print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
     print(f"  Time: {time_results['ImprovedBlockQRCS']:.2f}s")
 
-    # 8. Stratified Shapley (Stratified Coalition Sampling)
-    print("\nComputing Stratified Shapley values...")
-    print("Using stratified coalition sampling with flexible allocation strategies")
-    print("This provides unbiased Shapley value estimation")
+    # 8. Stratified Shapley - Direct Estimation
+    print("\nComputing Stratified Shapley values (Direct estimation)...")
+    print("Using stratified coalition sampling with direct weighted estimation")
     start_time = time.time()
-    stratified_explainer = StratifiedShapleyExplainer(
+    stratified_direct_explainer = StratifiedShapleyExplainer(
         characteristic_function=custom_char_func,
         verbose=True,
-        **STRATIFIED_CONFIG
+        **STRATIFIED_DIRECT_CONFIG
     )
-    all_values['stratified'] = stratified_explainer.fit_explain(G)
-    time_results['Stratified'] = time.time() - start_time
+    all_values['stratified_direct'] = stratified_direct_explainer.fit_explain(G)
+    time_results['Stratified-Direct'] = time.time() - start_time
 
     # Print sampling statistics
-    stratified_stats = stratified_explainer.get_sampling_stats()
+    stratified_stats = stratified_direct_explainer.get_sampling_stats()
     if stratified_stats:
-        print(f"\nStratified Sampling Statistics:")
+        print(f"\nStratified Direct Sampling Statistics:")
         print(f"  Total samples: {stratified_stats.total_budget}")
         nonzero_strata = sum(1 for a in stratified_stats.allocations_by_size if a > 0)
         print(f"  Strata with samples: {nonzero_strata}/{stratified_stats.n_players}")
-    print(f"  Time: {time_results['Stratified']:.2f}s")
+    print(f"  Time: {time_results['Stratified-Direct']:.2f}s")
 
-    # 9. Leverage SHAP
+    # 9. Stratified Shapley - CS Reconstruction
+    print("\nComputing Stratified Shapley values (CS reconstruction)...")
+    print("Using stratified coalition sampling with compressed sensing reconstruction")
+    start_time = time.time()
+    stratified_cs_explainer = StratifiedShapleyExplainer(
+        characteristic_function=custom_char_func,
+        verbose=True,
+        **STRATIFIED_CS_CONFIG
+    )
+    all_values['stratified_cs'] = stratified_cs_explainer.fit_explain(G)
+    time_results['Stratified-CS'] = time.time() - start_time
+
+    # Print sampling statistics
+    stratified_cs_stats = stratified_cs_explainer.get_sampling_stats()
+    if stratified_cs_stats:
+        print(f"\nStratified CS Sampling Statistics:")
+        print(f"  Total samples: {stratified_cs_stats.total_budget}")
+        nonzero_strata = sum(1 for a in stratified_cs_stats.allocations_by_size if a > 0)
+        print(f"  Strata with samples: {nonzero_strata}/{stratified_cs_stats.n_players}")
+    print(f"  Time: {time_results['Stratified-CS']:.2f}s")
+
+    # 10. Leverage SHAP
     print("\nComputing Leverage SHAP values (ICLR 2025)...")
     print("Using leverage score sampling with provable O(n log n) guarantees")
     start_time = time.time()
@@ -961,7 +987,7 @@ def _compute_all_explainers(G, custom_char_func, X):
     print(f"  Time: {time_results['LeverageSHAP']:.2f}s")
     print("  Achieved ~50% error reduction compared to Kernel SHAP (based on paper)")
 
-    # 10. Multilinear Extension with Leverage Sampling (Owen 1972 + Musco & Witter 2025)
+    # 11. Multilinear Extension with Leverage Sampling (Owen 1972 + Musco & Witter 2025)
     print("\nComputing Multilinear Extension Shapley values (with leverage sampling)...")
     print("Using Owen's multilinear extension + leverage-stratified sampling (LEM)")
     start_time = time.time()
@@ -983,7 +1009,7 @@ def _compute_all_explainers(G, custom_char_func, X):
         print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
     print(f"  Time: {time_results['Multilinear-LEM']:.2f}s")
 
-    # 11. Multilinear Extension with Naive Sampling (Owen 1972 only)
+    # 12. Multilinear Extension with Naive Sampling (Owen 1972 only)
     print("\nComputing Multilinear Extension Shapley values (naive sampling)...")
     print("Using Owen's multilinear extension + naive Bernoulli sampling")
     start_time = time.time()
@@ -1023,7 +1049,8 @@ def _convert_to_feature_rankings(all_values, X, model, y):
         'BlockQRCS': 'block_qrcs',
         'ImprovedQRCS': 'improved_qrcs',
         'ImprovedBlockQRCS': 'improved_block_qrcs',
-        'Stratified': 'stratified',
+        'Stratified-Direct': 'stratified_direct',
+        'Stratified-CS': 'stratified_cs',
         'LeverageSHAP': 'leverage_shap',
         'Multilinear-LEM': 'multilinear',
         'Multilinear-Naive': 'multilinear_naive',
@@ -1366,7 +1393,8 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             block_qrcs_values=all_values['block_qrcs'],
             improved_qrcs_values=all_values['improved_qrcs'],
             improved_block_qrcs_values=all_values['improved_block_qrcs'],
-            stratified_values=all_values['stratified'],
+            stratified_direct_values=all_values['stratified_direct'],
+            stratified_cs_values=all_values['stratified_cs'],
             leverage_shap_values=all_values['leverage_shap'],
             improved_shapley_values=improved_shapley_values,
             time_results=time_results,
@@ -1389,7 +1417,8 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
         all_values['block_qrcs'],
         all_values['improved_qrcs'],
         all_values['improved_block_qrcs'],
-        all_values['stratified'],
+        all_values['stratified_direct'],
+        all_values['stratified_cs'],
         all_values['leverage_shap'],
         improved_shapley_values,
         time_results,
@@ -1493,8 +1522,8 @@ Examples:
     print("\nRunning benchmark...")
     (shapley_values, cis_values, random_cs_values, qrcs_values,
      block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-     stratified_values, leverage_shap_values, improved_shapley_values,
-     time_results, results) = benchmark_feature_importance(
+     stratified_direct_values, stratified_cs_values, leverage_shap_values,
+     improved_shapley_values, time_results, results) = benchmark_feature_importance(
         reader,
         model,
         dataset=args.dataset,
@@ -1516,7 +1545,8 @@ Examples:
     print("Block QR-CS values:", block_qrcs_values)
     print("Improved QR-CS values:", improved_qrcs_values)
     print("Improved Block QR-CS values:", improved_block_qrcs_values)
-    print("Stratified values:", stratified_values)
+    print("Stratified-Direct values:", stratified_direct_values)
+    print("Stratified-CS values:", stratified_cs_values)
     print("Leverage SHAP values:", leverage_shap_values)
     if improved_shapley_values:
         print("\nImproved graph Shapley values:")
