@@ -12,6 +12,11 @@ Methods compared:
 - ImprovedBlockQRCSExplainer: Per-block adaptive detection
 - StratifiedShapleyExplainer: Stratified coalition sampling with flexible allocation strategies
 - LeverageScoreExplainer: Leverage score sampling (ICLR 2025)
+- MultilinearExplainer: Owen's multilinear extension with multiple sampling strategies:
+  - Naive: Simple Bernoulli sampling
+  - ShapleyWeight: Leverage-stratified with Shapley weights
+  - InverseCoalition: Leverage-stratified with 1/C(n-1,s) (Musco & Witter 2025)
+  - Bernoulli: Bernoulli sampling with oversampling parameter c
 """
 
 # ==============================================================================
@@ -136,11 +141,23 @@ STRATIFIED_CS_CONFIG = {
 
 MULTILINEAR_CONFIG = {
     'n_quadrature': 11,      # Quadrature points for integration (odd number preferred)
-    'n_samples': 50,        # Samples per quadrature point for partial derivative estimation
-    'use_leverage': True,    # Use leverage-stratified sampling (LEM)
+    'n_samples': 100,        # Total samples across ALL quadrature points (per player)
+    'use_leverage': True,    # Use leverage-based sampling
     'compute_error_bounds': True,  # Compute rigorous error bounds
     'confidence': 0.95,      # Confidence level for error bounds
     'seed': 42,              # Random seed for reproducibility
+}
+
+# Multilinear with Bernoulli sampling (similar to StratifiedShapley leverage_bernoulli)
+MULTILINEAR_BERNOULLI_CONFIG = {
+    'n_quadrature': None,
+    'n_samples': None,
+    'use_leverage': True,
+    'sampling_method': 'bernoulli',  # Uses oversampling parameter c
+    'leverage_type': 'inverse_coalition',
+    'compute_error_bounds': True,
+    'confidence': 0.95,
+    'seed': 42,
 }
 
 # Plotting configuration
@@ -987,29 +1004,7 @@ def _compute_all_explainers(G, custom_char_func, X):
     print(f"  Time: {time_results['LeverageSHAP']:.2f}s")
     print("  Achieved ~50% error reduction compared to Kernel SHAP (based on paper)")
 
-    # 11. Multilinear Extension with Leverage Sampling (Owen 1972 + Musco & Witter 2025)
-    print("\nComputing Multilinear Extension Shapley values (with leverage sampling)...")
-    print("Using Owen's multilinear extension + leverage-stratified sampling (LEM)")
-    start_time = time.time()
-    multilinear_explainer = MultilinearExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True,
-        **MULTILINEAR_CONFIG
-    )
-    all_values['multilinear'] = multilinear_explainer.fit_explain(G)
-    time_results['Multilinear-LEM'] = time.time() - start_time
-
-    # Get computation statistics
-    ml_stats = multilinear_explainer.get_computation_stats()
-    print(f"  Method used: {ml_stats.get('method_used', 'N/A')}")
-    if ml_stats.get('use_leverage'):
-        print(f"  Leverage efficiency: {ml_stats.get('leverage_efficiency', 1.0):.2f}x")
-    error_bounds = multilinear_explainer.get_error_bounds()
-    if error_bounds:
-        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
-    print(f"  Time: {time_results['Multilinear-LEM']:.2f}s")
-
-    # 12. Multilinear Extension with Naive Sampling (Owen 1972 only)
+    # 11. Multilinear Extension with Naive Sampling (Owen 1972 only)
     print("\nComputing Multilinear Extension Shapley values (naive sampling)...")
     print("Using Owen's multilinear extension + naive Bernoulli sampling")
     start_time = time.time()
@@ -1027,6 +1022,88 @@ def _compute_all_explainers(G, custom_char_func, X):
     ml_naive_stats = multilinear_naive_explainer.get_computation_stats()
     print(f"  Method used: {ml_naive_stats.get('method_used', 'N/A')}")
     print(f"  Time: {time_results['Multilinear-Naive']:.2f}s")
+
+    # 12. Multilinear Extension with Shapley-Weighted Leverage
+    print("\nComputing Multilinear Extension Shapley values (Shapley-weighted leverage)...")
+    print("Using Owen's multilinear extension + Shapley-weighted leverage sampling")
+    start_time = time.time()
+    multilinear_sw_config = {k: v for k, v in MULTILINEAR_CONFIG.items()}
+    multilinear_sw_config['leverage_type'] = 'shapley_weighted'
+    multilinear_sw_explainer = MultilinearExplainer(
+        characteristic_function=custom_char_func,
+        verbose=True,
+        **multilinear_sw_config
+    )
+    all_values['multilinear_shapley_weighted'] = multilinear_sw_explainer.fit_explain(G)
+    time_results['Multilinear-ShapleyWeight'] = time.time() - start_time
+
+    ml_sw_stats = multilinear_sw_explainer.get_computation_stats()
+    print(f"  Method used: {ml_sw_stats.get('method_used', 'N/A')}")
+    print(f"  Leverage type: {ml_sw_stats.get('leverage_type', 'N/A')}")
+    error_bounds = multilinear_sw_explainer.get_error_bounds()
+    if error_bounds:
+        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
+    print(f"  Time: {time_results['Multilinear-ShapleyWeight']:.2f}s")
+
+    # 13. Multilinear Extension with Inverse-Coalition Leverage (Musco & Witter 2025)
+    print("\nComputing Multilinear Extension Shapley values (inverse-coalition leverage)...")
+    print("Using Owen's multilinear extension + inverse-coalition leverage (Musco & Witter 2025)")
+    start_time = time.time()
+    multilinear_ic_config = {k: v for k, v in MULTILINEAR_CONFIG.items()}
+    multilinear_ic_config['leverage_type'] = 'inverse_coalition'
+    multilinear_ic_explainer = MultilinearExplainer(
+        characteristic_function=custom_char_func,
+        verbose=True,
+        **multilinear_ic_config
+    )
+    all_values['multilinear_inverse_coalition'] = multilinear_ic_explainer.fit_explain(G)
+    time_results['Multilinear-InverseCoalition'] = time.time() - start_time
+
+    ml_ic_stats = multilinear_ic_explainer.get_computation_stats()
+    print(f"  Method used: {ml_ic_stats.get('method_used', 'N/A')}")
+    print(f"  Leverage type: {ml_ic_stats.get('leverage_type', 'N/A')}")
+    error_bounds = multilinear_ic_explainer.get_error_bounds()
+    if error_bounds:
+        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
+    print(f"  Time: {time_results['Multilinear-InverseCoalition']:.2f}s")
+
+    # 14. Multilinear Extension with Bernoulli Sampling (similar to leverage_bernoulli)
+    print("\nComputing Multilinear Extension Shapley values (Bernoulli sampling)...")
+    print("Using Owen's multilinear extension + Bernoulli sampling with oversampling c")
+    start_time = time.time()
+    multilinear_bern_explainer = MultilinearExplainer(
+        characteristic_function=custom_char_func,
+        verbose=True,
+        **MULTILINEAR_BERNOULLI_CONFIG
+    )
+    all_values['multilinear_bernoulli'] = multilinear_bern_explainer.fit_explain(G)
+    time_results['Multilinear-Bernoulli'] = time.time() - start_time
+
+    ml_bern_stats = multilinear_bern_explainer.get_computation_stats()
+    print(f"  Method used: {ml_bern_stats.get('method_used', 'N/A')}")
+    print(f"  Sampling method: {ml_bern_stats.get('sampling_method', 'N/A')}")
+    print(f"  Leverage type: {ml_bern_stats.get('leverage_type', 'N/A')}")
+    # Print size distribution
+    size_dist = multilinear_bern_explainer.get_size_distribution()
+    if size_dist:
+        total_samples = sum(size_dist.values())
+        print(f"  Size distribution (total={total_samples}):")
+        sizes = sorted(size_dist.keys())
+        # Print first 3 and last 3 sizes
+        for s in sizes[:3]:
+            count = size_dist[s]
+            pct = count / total_samples * 100
+            print(f"    size {s}: {count} ({pct:.1f}%)")
+        if len(sizes) > 6:
+            print(f"    ...")
+        for s in sizes[-3:]:
+            count = size_dist[s]
+            pct = count / total_samples * 100
+            print(f"    size {s}: {count} ({pct:.1f}%)")
+    error_bounds = multilinear_bern_explainer.get_error_bounds()
+    if error_bounds:
+        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
+    print(f"  Time: {time_results['Multilinear-Bernoulli']:.2f}s")
 
     return all_values, time_results
 
@@ -1052,8 +1129,10 @@ def _convert_to_feature_rankings(all_values, X, model, y):
         'Stratified-Direct': 'stratified_direct',
         'Stratified-CS': 'stratified_cs',
         'LeverageSHAP': 'leverage_shap',
-        'Multilinear-LEM': 'multilinear',
         'Multilinear-Naive': 'multilinear_naive',
+        'Multilinear-ShapleyWeight': 'multilinear_shapley_weighted',
+        'Multilinear-InverseCoalition': 'multilinear_inverse_coalition',
+        'Multilinear-Bernoulli': 'multilinear_bernoulli',
     }
 
     for display_name, key in methods_mapping.items():
@@ -1287,8 +1366,13 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             'block_qrcs': cached_data['block_qrcs_values'],
             'improved_qrcs': cached_data['improved_qrcs_values'],
             'improved_block_qrcs': cached_data['improved_block_qrcs_values'],
-            'stratified': cached_data.get('stratified_values', {}),
+            'stratified_direct': cached_data.get('stratified_direct_values', {}),
+            'stratified_cs': cached_data.get('stratified_cs_values', {}),
             'leverage_shap': cached_data.get('leverage_shap_values', {}),
+            'multilinear_naive': cached_data.get('multilinear_naive_values', {}),
+            'multilinear_shapley_weighted': cached_data.get('multilinear_shapley_weighted_values', {}),
+            'multilinear_inverse_coalition': cached_data.get('multilinear_inverse_coalition_values', {}),
+            'multilinear_bernoulli': cached_data.get('multilinear_bernoulli_values', {}),
         }
         time_results = cached_data['time_results']
         improved_shapley_values = cached_data.get('improved_shapley_values', {})
@@ -1396,6 +1480,10 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             stratified_direct_values=all_values['stratified_direct'],
             stratified_cs_values=all_values['stratified_cs'],
             leverage_shap_values=all_values['leverage_shap'],
+            multilinear_naive_values=all_values['multilinear_naive'],
+            multilinear_shapley_weighted_values=all_values['multilinear_shapley_weighted'],
+            multilinear_inverse_coalition_values=all_values['multilinear_inverse_coalition'],
+            multilinear_bernoulli_values=all_values['multilinear_bernoulli'],
             improved_shapley_values=improved_shapley_values,
             time_results=time_results,
             kpi_results=kpi_results
@@ -1420,6 +1508,10 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
         all_values['stratified_direct'],
         all_values['stratified_cs'],
         all_values['leverage_shap'],
+        all_values['multilinear_naive'],
+        all_values['multilinear_shapley_weighted'],
+        all_values['multilinear_inverse_coalition'],
+        all_values['multilinear_bernoulli'],
         improved_shapley_values,
         time_results,
         kpi_results
@@ -1523,7 +1615,8 @@ Examples:
     (shapley_values, cis_values, random_cs_values, qrcs_values,
      block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
      stratified_direct_values, stratified_cs_values, leverage_shap_values,
-     improved_shapley_values, time_results, results) = benchmark_feature_importance(
+     multilinear_naive_values, multilinear_sw_values, multilinear_ic_values,
+     multilinear_bern_values, improved_shapley_values, time_results, results) = benchmark_feature_importance(
         reader,
         model,
         dataset=args.dataset,
@@ -1548,6 +1641,10 @@ Examples:
     print("Stratified-Direct values:", stratified_direct_values)
     print("Stratified-CS values:", stratified_cs_values)
     print("Leverage SHAP values:", leverage_shap_values)
+    print("Multilinear-Naive values:", multilinear_naive_values)
+    print("Multilinear-ShapleyWeight values:", multilinear_sw_values)
+    print("Multilinear-InverseCoalition values:", multilinear_ic_values)
+    print("Multilinear-Bernoulli values:", multilinear_bern_values)
     if improved_shapley_values:
         print("\nImproved graph Shapley values:")
         for method, values in improved_shapley_values.items():
