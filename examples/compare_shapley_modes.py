@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 
-def load_csv_results(dataset, imputation, shapley_mode, kpi_mode, output_dir='output'):
+def load_csv_results(dataset, imputation, shapley_mode, kpi_mode, output_dir="output"):
     """
     Load all CSV results for a given configuration.
 
@@ -36,28 +36,37 @@ def load_csv_results(dataset, imputation, shapley_mode, kpi_mode, output_dir='ou
     results = {}
 
     # Load rankings
-    rankings_file = output_path / f"rankings_{dataset}_{imputation}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
+    rankings_file = (
+        output_path
+        / f"rankings_{dataset}_{imputation}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
+    )
     if rankings_file.exists():
-        results['rankings'] = pd.read_csv(rankings_file)
+        results["rankings"] = pd.read_csv(rankings_file)
     else:
         print(f"Warning: {rankings_file} not found")
-        results['rankings'] = None
+        results["rankings"] = None
 
     # Load time comparison
-    time_file = output_path / f"time_{dataset}_{imputation}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
+    time_file = (
+        output_path
+        / f"time_{dataset}_{imputation}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
+    )
     if time_file.exists():
-        results['time'] = pd.read_csv(time_file)
+        results["time"] = pd.read_csv(time_file)
     else:
         print(f"Warning: {time_file} not found")
-        results['time'] = None
+        results["time"] = None
 
     # Load KPI metrics
-    kpi_file = output_path / f"kpi_metrics_{dataset}_{imputation}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
+    kpi_file = (
+        output_path
+        / f"kpi_metrics_{dataset}_{imputation}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
+    )
     if kpi_file.exists():
-        results['kpi_metrics'] = pd.read_csv(kpi_file)
+        results["kpi_metrics"] = pd.read_csv(kpi_file)
     else:
         print(f"Warning: {kpi_file} not found")
-        results['kpi_metrics'] = None
+        results["kpi_metrics"] = None
 
     return results
 
@@ -87,8 +96,8 @@ def calculate_ranking_agreement(rankings1, rankings2, top_k=10):
 
     # Overlap@K
     overlap = len(set1 & set2)
-    metrics['overlap@K'] = overlap
-    metrics['overlap_ratio'] = overlap / top_k
+    metrics["overlap@K"] = overlap
+    metrics["overlap_ratio"] = overlap / top_k
 
     # Calculate position differences for overlapping features
     position_diffs = []
@@ -98,8 +107,8 @@ def calculate_ranking_agreement(rankings1, rankings2, top_k=10):
         if pos1 is not None and pos2 is not None:
             position_diffs.append(abs(pos1 - pos2))
 
-    metrics['avg_position_diff'] = np.mean(position_diffs) if position_diffs else None
-    metrics['max_position_diff'] = np.max(position_diffs) if position_diffs else None
+    metrics["avg_position_diff"] = np.mean(position_diffs) if position_diffs else None
+    metrics["max_position_diff"] = np.max(position_diffs) if position_diffs else None
 
     return metrics
 
@@ -111,15 +120,15 @@ def compare_rankings(mask_results, retrain_results, top_k=10):
     Returns:
         DataFrame with comparison metrics for each method
     """
-    mask_rankings = mask_results['rankings']
-    retrain_rankings = retrain_results['rankings']
+    mask_rankings = mask_results["rankings"]
+    retrain_rankings = retrain_results["rankings"]
 
     if mask_rankings is None or retrain_rankings is None:
         print("Error: Cannot compare rankings - data not found")
         return None
 
     # Get all methods (exclude 'Top-N' column)
-    methods = [col for col in mask_rankings.columns if col != 'Top-N']
+    methods = [col for col in mask_rankings.columns if col != "Top-N"]
 
     comparison_data = []
 
@@ -131,13 +140,23 @@ def compare_rankings(mask_results, retrain_results, top_k=10):
         agreement = calculate_ranking_agreement(mask_list, retrain_list, top_k)
 
         if agreement:
-            comparison_data.append({
-                'Method': method,
-                f'Overlap@{top_k}': agreement['overlap@K'],
-                'Overlap Ratio': f"{agreement['overlap_ratio']:.2%}",
-                'Avg Position Diff': f"{agreement['avg_position_diff']:.2f}" if agreement['avg_position_diff'] else 'N/A',
-                'Max Position Diff': agreement['max_position_diff'] if agreement['max_position_diff'] else 'N/A'
-            })
+            comparison_data.append(
+                {
+                    "Method": method,
+                    f"Overlap@{top_k}": agreement["overlap@K"],
+                    "Overlap Ratio": f"{agreement['overlap_ratio']:.2%}",
+                    "Avg Position Diff": (
+                        f"{agreement['avg_position_diff']:.2f}"
+                        if agreement["avg_position_diff"]
+                        else "N/A"
+                    ),
+                    "Max Position Diff": (
+                        agreement["max_position_diff"]
+                        if agreement["max_position_diff"]
+                        else "N/A"
+                    ),
+                }
+            )
 
     return pd.DataFrame(comparison_data)
 
@@ -149,8 +168,8 @@ def compare_kpi_metrics(mask_results, retrain_results):
     Returns:
         DataFrame with side-by-side comparison
     """
-    mask_kpi = mask_results['kpi_metrics']
-    retrain_kpi = retrain_results['kpi_metrics']
+    mask_kpi = mask_results["kpi_metrics"]
+    retrain_kpi = retrain_results["kpi_metrics"]
 
     if mask_kpi is None or retrain_kpi is None:
         print("Error: Cannot compare KPI metrics - data not found")
@@ -158,25 +177,25 @@ def compare_kpi_metrics(mask_results, retrain_results):
 
     # Merge on Method
     comparison = pd.merge(
-        mask_kpi[['Method', 'Weighted Slope (S)']],
-        retrain_kpi[['Method', 'Weighted Slope (S)']],
-        on='Method',
-        suffixes=(' (Mask)', ' (Retrain)')
+        mask_kpi[["Method", "Weighted Slope (S)"]],
+        retrain_kpi[["Method", "Weighted Slope (S)"]],
+        on="Method",
+        suffixes=(" (Mask)", " (Retrain)"),
     )
 
     # Calculate difference and relative difference
-    comparison['S Difference'] = (
-        comparison['Weighted Slope (S) (Retrain)'] -
-        comparison['Weighted Slope (S) (Mask)']
+    comparison["S Difference"] = (
+        comparison["Weighted Slope (S) (Retrain)"]
+        - comparison["Weighted Slope (S) (Mask)"]
     )
 
-    comparison['S Relative Change'] = (
-        comparison['S Difference'] / comparison['Weighted Slope (S) (Mask)'] * 100
+    comparison["S Relative Change"] = (
+        comparison["S Difference"] / comparison["Weighted Slope (S) (Mask)"] * 100
     )
 
     # Add interpretation
-    comparison['Better Mode'] = comparison['S Difference'].apply(
-        lambda x: 'Retrain' if x > 0 else ('Mask' if x < 0 else 'Same')
+    comparison["Better Mode"] = comparison["S Difference"].apply(
+        lambda x: "Retrain" if x > 0 else ("Mask" if x < 0 else "Same")
     )
 
     return comparison
@@ -189,8 +208,8 @@ def compare_execution_time(mask_results, retrain_results):
     Returns:
         DataFrame with side-by-side time comparison
     """
-    mask_time = mask_results['time']
-    retrain_time = retrain_results['time']
+    mask_time = mask_results["time"]
+    retrain_time = retrain_results["time"]
 
     if mask_time is None or retrain_time is None:
         print("Error: Cannot compare execution times - data not found")
@@ -198,16 +217,15 @@ def compare_execution_time(mask_results, retrain_results):
 
     # Merge on Method
     comparison = pd.merge(
-        mask_time[['Method', 'Time (seconds)']],
-        retrain_time[['Method', 'Time (seconds)']],
-        on='Method',
-        suffixes=(' (Mask)', ' (Retrain)')
+        mask_time[["Method", "Time (seconds)"]],
+        retrain_time[["Method", "Time (seconds)"]],
+        on="Method",
+        suffixes=(" (Mask)", " (Retrain)"),
     )
 
     # Calculate speedup
-    comparison['Speedup (Mask/Retrain)'] = (
-        comparison['Time (seconds) (Retrain)'] /
-        comparison['Time (seconds) (Mask)']
+    comparison["Speedup (Mask/Retrain)"] = (
+        comparison["Time (seconds) (Retrain)"] / comparison["Time (seconds) (Mask)"]
     )
 
     return comparison
@@ -226,9 +244,15 @@ def print_summary_statistics(comparison_df, metric_name):
     print()
 
 
-def save_comparison_results(dataset, imputation, kpi_mode,
-                           ranking_comparison, kpi_comparison, time_comparison,
-                           output_dir='output/comparisons'):
+def save_comparison_results(
+    dataset,
+    imputation,
+    kpi_mode,
+    ranking_comparison,
+    kpi_comparison,
+    time_comparison,
+    output_dir="output/comparisons",
+):
     """Save all comparison results to CSV files."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -260,7 +284,7 @@ def save_comparison_results(dataset, imputation, kpi_mode,
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Compare Shapley modes (masking vs retraining)',
+        description="Compare Shapley modes (masking vs retraining)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -274,21 +298,35 @@ Examples:
   for imp in mean zero permutation; do
     python compare_shapley_modes.py --dataset housing --imputation $imp --kpi-mode retrain
   done
-        """
+        """,
     )
 
-    parser.add_argument('--dataset', default='housing',
-                       help='Dataset name (default: housing)')
-    parser.add_argument('--imputation', default='mean',
-                       choices=['mean', 'zero', 'permutation'],
-                       help='Imputation strategy (default: mean)')
-    parser.add_argument('--kpi-mode', default='retrain',
-                       choices=['mask', 'retrain'],
-                       help='KPI mode to use for comparison (default: retrain)')
-    parser.add_argument('--top-k', type=int, default=10,
-                       help='Number of top features to compare (default: 10)')
-    parser.add_argument('--output-dir', default='output',
-                       help='Directory containing CSV files (default: output)')
+    parser.add_argument(
+        "--dataset", default="housing", help="Dataset name (default: housing)"
+    )
+    parser.add_argument(
+        "--imputation",
+        default="mean",
+        choices=["mean", "zero", "permutation"],
+        help="Imputation strategy (default: mean)",
+    )
+    parser.add_argument(
+        "--kpi-mode",
+        default="retrain",
+        choices=["mask", "retrain"],
+        help="KPI mode to use for comparison (default: retrain)",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="Number of top features to compare (default: 10)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="output",
+        help="Directory containing CSV files (default: output)",
+    )
 
     args = parser.parse_args()
 
@@ -308,12 +346,12 @@ Examples:
 
     print("\n[1/2] Loading Shapley MASK mode results...")
     mask_results = load_csv_results(
-        args.dataset, args.imputation, 'mask', args.kpi_mode, args.output_dir
+        args.dataset, args.imputation, "mask", args.kpi_mode, args.output_dir
     )
 
     print("\n[2/2] Loading Shapley RETRAIN mode results...")
     retrain_results = load_csv_results(
-        args.dataset, args.imputation, 'retrain', args.kpi_mode, args.output_dir
+        args.dataset, args.imputation, "retrain", args.kpi_mode, args.output_dir
     )
 
     # Perform comparisons
@@ -325,7 +363,9 @@ Examples:
     print("\n" + "-" * 80)
     print(f"1. FEATURE RANKING AGREEMENT (Top-{args.top_k})")
     print("-" * 80)
-    print("\nThis shows how similar the feature rankings are between the two Shapley modes.")
+    print(
+        "\nThis shows how similar the feature rankings are between the two Shapley modes."
+    )
     print("Higher overlap = more agreement between methods")
 
     ranking_comparison = compare_rankings(mask_results, retrain_results, args.top_k)
@@ -343,22 +383,30 @@ Examples:
 
     if kpi_comparison is not None and len(kpi_comparison) > 0:
         print("\nInterpretation:")
-        better_with_retrain = (kpi_comparison['Better Mode'] == 'Retrain').sum()
-        better_with_mask = (kpi_comparison['Better Mode'] == 'Mask').sum()
-        same = (kpi_comparison['Better Mode'] == 'Same').sum()
+        better_with_retrain = (kpi_comparison["Better Mode"] == "Retrain").sum()
+        better_with_mask = (kpi_comparison["Better Mode"] == "Mask").sum()
+        same = (kpi_comparison["Better Mode"] == "Same").sum()
         total = len(kpi_comparison)
 
-        print(f"  - Methods improved with retraining: {better_with_retrain}/{total} ({better_with_retrain/total*100:.1f}%)")
-        print(f"  - Methods better with masking: {better_with_mask}/{total} ({better_with_mask/total*100:.1f}%)")
+        print(
+            f"  - Methods improved with retraining: {better_with_retrain}/{total} ({better_with_retrain/total*100:.1f}%)"
+        )
+        print(
+            f"  - Methods better with masking: {better_with_mask}/{total} ({better_with_mask/total*100:.1f}%)"
+        )
         print(f"  - No difference: {same}/{total}")
 
-        avg_relative_change = kpi_comparison['S Relative Change'].mean()
+        avg_relative_change = kpi_comparison["S Relative Change"].mean()
         print(f"\n  Average S value change: {avg_relative_change:+.2f}%")
 
         if avg_relative_change > 1:
-            print(f"  → Retraining during Shapley calculation improves accuracy by ~{avg_relative_change:.1f}% on average")
+            print(
+                f"  → Retraining during Shapley calculation improves accuracy by ~{avg_relative_change:.1f}% on average"
+            )
         elif avg_relative_change < -1:
-            print(f"  → Masking during Shapley calculation is better by ~{abs(avg_relative_change):.1f}% on average")
+            print(
+                f"  → Masking during Shapley calculation is better by ~{abs(avg_relative_change):.1f}% on average"
+            )
         else:
             print(f"  → No significant difference between modes")
 
@@ -372,7 +420,7 @@ Examples:
     print_summary_statistics(time_comparison, "Execution Time")
 
     if time_comparison is not None and len(time_comparison) > 0:
-        avg_speedup = time_comparison['Speedup (Mask/Retrain)'].mean()
+        avg_speedup = time_comparison["Speedup (Mask/Retrain)"].mean()
         print(f"\nAverage speedup (masking vs retraining): {avg_speedup:.1f}x")
         print(f"→ Masking is ~{avg_speedup:.0f}x faster than retraining on average")
 
@@ -382,8 +430,12 @@ Examples:
     print("=" * 80)
 
     saved_files = save_comparison_results(
-        args.dataset, args.imputation, args.kpi_mode,
-        ranking_comparison, kpi_comparison, time_comparison
+        args.dataset,
+        args.imputation,
+        args.kpi_mode,
+        ranking_comparison,
+        kpi_comparison,
+        time_comparison,
     )
 
     print(f"\n✓ Saved {len(saved_files)} comparison files to output/comparisons/")
@@ -401,20 +453,28 @@ Examples:
     print()
 
     if kpi_comparison is not None and len(kpi_comparison) > 0:
-        avg_change = kpi_comparison['S Relative Change'].mean()
+        avg_change = kpi_comparison["S Relative Change"].mean()
         if avg_change > 1:
-            print(f"Answer: YES - Retraining improves S values by {avg_change:.1f}% on average")
+            print(
+                f"Answer: YES - Retraining improves S values by {avg_change:.1f}% on average"
+            )
         elif avg_change < -1:
-            print(f"Answer: NO - Masking performs {abs(avg_change):.1f}% better on average")
+            print(
+                f"Answer: NO - Masking performs {abs(avg_change):.1f}% better on average"
+            )
         else:
-            print(f"Answer: MINIMAL DIFFERENCE - Only {abs(avg_change):.2f}% difference")
+            print(
+                f"Answer: MINIMAL DIFFERENCE - Only {abs(avg_change):.2f}% difference"
+            )
 
         if time_comparison is not None:
-            speedup = time_comparison['Speedup (Mask/Retrain)'].mean()
-            print(f"\nTrade-off: Masking is {speedup:.0f}x faster but {'less' if avg_change > 0 else 'more'} accurate")
+            speedup = time_comparison["Speedup (Mask/Retrain)"].mean()
+            print(
+                f"\nTrade-off: Masking is {speedup:.0f}x faster but {'less' if avg_change > 0 else 'more'} accurate"
+            )
 
     print("\n" + "=" * 80)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

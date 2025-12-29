@@ -40,7 +40,7 @@ plot(shapley_values, top_n=10)
 ```
 """
 
-__version__ = '0.13.8'
+__version__ = "0.13.8"
 
 # New modular API imports
 from .explainer import (
@@ -57,7 +57,7 @@ from .explainer import (
     ImprovedBlockQRCSExplainer,
     LeverageScoreExplainer,
     MultilinearExplainer,
-    StratifiedShapleyExplainer
+    StratifiedShapleyExplainer,
 )
 
 from .characteristic import (
@@ -65,7 +65,7 @@ from .characteristic import (
     NodeCount,
     WeightedSum,
     CustomFunction,
-    CenterOfImputationSet
+    CenterOfImputationSet,
 )
 
 from .utils import (
@@ -75,14 +75,10 @@ from .utils import (
     matrix_generator,
     kl,
     kl_mi_matrix,
-    create_minimal_edge_graph
+    create_minimal_edge_graph,
 )
 
-from .visualization import (
-    FeatureImportanceVisualizer,
-    plot_shapley_values,
-    plot
-)
+from .visualization import FeatureImportanceVisualizer, plot_shapley_values, plot
 
 # Backward compatibility imports from old API
 from .__legacy import (
@@ -91,60 +87,53 @@ from .__legacy import (
     coalition_degree,
     cis,
     graph_generator,
-    get_reachable_nodes_at_depth
+    get_reachable_nodes_at_depth,
 )
 
 # All exported symbols
 __all__ = [
     # Version
-    '__version__',
-
+    "__version__",
     # New API - Base classes
-    'CharacteristicFunction',
-    'Explainer',
-    'GraphExplainer',
-
+    "CharacteristicFunction",
+    "Explainer",
+    "GraphExplainer",
     # New API - Explainers
-    'ExactExplainer',
-    'ShapGExplainer',
-    'CISExplainer',
-    'RandomCSExplainer',
-    'QRCSExplainer',
-    'BlockQRCSExplainer',
-    'ImprovedQRCSExplainer',
-    'ImprovedBlockQRCSExplainer',
-    'LeverageScoreExplainer',
-    'MultilinearExplainer',
-    'StratifiedShapleyExplainer',
-
+    "ExactExplainer",
+    "ShapGExplainer",
+    "CISExplainer",
+    "RandomCSExplainer",
+    "QRCSExplainer",
+    "BlockQRCSExplainer",
+    "ImprovedQRCSExplainer",
+    "ImprovedBlockQRCSExplainer",
+    "LeverageScoreExplainer",
+    "MultilinearExplainer",
+    "StratifiedShapleyExplainer",
     # New API - Characteristic functions
-    'CoalitionDegree',
-    'NodeCount',
-    'WeightedSum',
-    'CustomFunction',
-    'CenterOfImputationSet',
-
+    "CoalitionDegree",
+    "NodeCount",
+    "WeightedSum",
+    "CustomFunction",
+    "CenterOfImputationSet",
     # New API - Graph construction
-    'GraphBuilder',
-    'CoalitionManager',
-
+    "GraphBuilder",
+    "CoalitionManager",
     # New API - Visualization
-    'FeatureImportanceVisualizer',
-    'plot_shapley_values',
-
+    "FeatureImportanceVisualizer",
+    "plot_shapley_values",
     # Old API - Backward compatibility
-    'shapley_value',
-    'shapG',
-    'cis',
-    'coalition_degree',
-    'graph_generator',
-    'get_reachable_nodes_at_depth',
-    'plot',
-
+    "shapley_value",
+    "shapG",
+    "cis",
+    "coalition_degree",
+    "graph_generator",
+    "get_reachable_nodes_at_depth",
+    "plot",
     # Utils
-    'corr_generator',
-    'matrix_generator',
-    'kl',
-    'kl_mi_matrix',
-    'create_minimal_edge_graph',
+    "corr_generator",
+    "matrix_generator",
+    "kl",
+    "kl_mi_matrix",
+    "create_minimal_edge_graph",
 ]

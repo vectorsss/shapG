@@ -24,7 +24,7 @@ class ImprovedQRCSExplainer(QRCSExplainer):
         tolerance: float = 5e-5,
         sparsity_threshold: float = 0.8,
         auto_adapt: bool = True,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """Initialize improved QR-CS explainer.
 
@@ -41,13 +41,15 @@ class ImprovedQRCSExplainer(QRCSExplainer):
             n_measurements=n_measurements,
             tolerance=tolerance,
             use_fast_fallback=False,  # Start with full CS
-            verbose=verbose
+            verbose=verbose,
         )
         self.sparsity_threshold = sparsity_threshold
         self.auto_adapt = auto_adapt
         self._sparsity_detected = None
 
-    def _check_sparsity(self, utility_func: Callable, sample_size: int = DEFAULT_SPARSITY_SAMPLE_SIZE) -> float:
+    def _check_sparsity(
+        self, utility_func: Callable, sample_size: int = DEFAULT_SPARSITY_SAMPLE_SIZE
+    ) -> float:
         """Check if marginal contributions are sparse in DCT domain.
 
         Args:
@@ -78,7 +80,11 @@ class ImprovedQRCSExplainer(QRCSExplainer):
         s_sample = Psi_sample.T @ u_sample
 
         # Count near-zero coefficients
-        threshold = DEFAULT_SPARSITY_THRESHOLD * np.max(np.abs(s_sample)) if len(s_sample) > 0 else DEFAULT_SPARSITY_THRESHOLD
+        threshold = (
+            DEFAULT_SPARSITY_THRESHOLD * np.max(np.abs(s_sample))
+            if len(s_sample) > 0
+            else DEFAULT_SPARSITY_THRESHOLD
+        )
         sparsity = np.sum(np.abs(s_sample) < threshold) / len(s_sample)
 
         return sparsity
@@ -92,9 +98,9 @@ class ImprovedQRCSExplainer(QRCSExplainer):
         for k in range(size):
             for n in range(size):
                 if k == 0:
-                    Psi[n, k] = np.sqrt(1/size)
+                    Psi[n, k] = np.sqrt(1 / size)
                 else:
-                    Psi[n, k] = np.sqrt(2/size) * np.cos(np.pi * k * (n + 0.5) / size)
+                    Psi[n, k] = np.sqrt(2 / size) * np.cos(np.pi * k * (n + 0.5) / size)
         return Psi
 
     def _compute_shapley(self, utility_func: Callable) -> Dict[int, float]:
@@ -112,12 +118,16 @@ class ImprovedQRCSExplainer(QRCSExplainer):
 
             if sparsity < self.sparsity_threshold:
                 if self.verbose:
-                    print(f"Signal not sparse enough ({100*sparsity:.1f}% < {100*self.sparsity_threshold:.1f}%)")
+                    print(
+                        f"Signal not sparse enough ({100*sparsity:.1f}% < {100*self.sparsity_threshold:.1f}%)"
+                    )
                     print("Switching to robust mean estimation (fast_fallback=True)")
                 self.use_fast_fallback = True
             else:
                 if self.verbose:
-                    print(f"Signal is sparse ({100*sparsity:.1f}%), using full CS reconstruction")
+                    print(
+                        f"Signal is sparse ({100*sparsity:.1f}%), using full CS reconstruction"
+                    )
 
         # Call parent implementation with adapted settings
         return super()._compute_shapley(utility_func)
@@ -129,8 +139,10 @@ class ImprovedQRCSExplainer(QRCSExplainer):
             Dict with sparsity information
         """
         return {
-            'detected_sparsity': self._sparsity_detected,
-            'threshold': self.sparsity_threshold,
-            'using_cs': not self.use_fast_fallback,
-            'method': 'Compressed Sensing' if not self.use_fast_fallback else 'Robust Mean'
+            "detected_sparsity": self._sparsity_detected,
+            "threshold": self.sparsity_threshold,
+            "using_cs": not self.use_fast_fallback,
+            "method": (
+                "Compressed Sensing" if not self.use_fast_fallback else "Robust Mean"
+            ),
         }

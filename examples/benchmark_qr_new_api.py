@@ -50,7 +50,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Add parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname('.'), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("."), "..")))
 
 # ShapG API
 from shapG import (
@@ -60,20 +60,21 @@ from shapG import (
     QRCSExplainer,
     MultilinearExplainer,
     CustomFunction,
-    GraphBuilder
+    GraphBuilder,
 )
 from shapG.explainer import (
     BlockQRCSExplainer,
     ImprovedQRCSExplainer,
     ImprovedBlockQRCSExplainer,
     StratifiedShapleyExplainer,
-    LeverageScoreExplainer
+    LeverageScoreExplainer,
 )
 from shapG.characteristic import GraphModelCharacteristic
 
 # Optional plotting style
 try:
     import gnuplot_style as gp
+
     gp.use("all")
 except ImportError:
     print("gnuplot_style not found, using default style")
@@ -90,74 +91,68 @@ OUTPUT_DIR = Path("output")
 CACHE_ENABLED = True
 
 # Model hyperparameters
-MODEL_RANDOM_STATES = {
-    lgb.LGBMClassifier: [10, 10],
-    lgb.LGBMRegressor: [42, 42]
-}
-MODEL_TEST_SIZES = {
-    lgb.LGBMClassifier: [0.2, 0.2],
-    lgb.LGBMRegressor: [0.2, 0.3]
-}
+MODEL_RANDOM_STATES = {lgb.LGBMClassifier: [10, 10], lgb.LGBMRegressor: [42, 42]}
+MODEL_TEST_SIZES = {lgb.LGBMClassifier: [0.2, 0.2], lgb.LGBMRegressor: [0.2, 0.3]}
 
 # Explainer configurations
 SHAPG_CONFIG = {
-    'depth': 1,
-    'n_samples': 3,
-    'approximate_by_ratio': False,
-    'scale': False,
+    "depth": 1,
+    "n_samples": 3,
+    "approximate_by_ratio": False,
+    "scale": False,
 }
 
 RANDOM_CS_CONFIG = {
-    'm': 50,          # Measurements per iteration
-    't': 30,          # Number of iterations
-    'seed': 42,
+    "m": 50,  # Measurements per iteration
+    "t": 30,  # Number of iterations
+    "seed": 42,
 }
 
 LEVERAGE_SHAP_CONFIG = {
-    'n_samples': 500,      # Uses 5*n by default
-    'paired_sampling': True,
-    'use_bernoulli': True,
-    'random_state': 42,
+    "n_samples": 500,  # Uses 5*n by default
+    "paired_sampling": True,
+    "use_bernoulli": True,
+    "random_state": 42,
 }
 
 IMPROVED_QRCS_CONFIG = {
-    'sparsity_threshold': 0.8,
-    'auto_adapt': True,
+    "sparsity_threshold": 0.8,
+    "auto_adapt": True,
 }
 
 STRATIFIED_DIRECT_CONFIG = {
-    'n_samples': 50,                      # Total coalition samples
-    'allocation_strategy': 'leverage_bernoulli',  # 'shapley_weighted', 'uniform', or 'leverage'
-    'use_direct_estimation': True,          # Use direct weighted estimation
-    'seed': 42,
+    "n_samples": 50,  # Total coalition samples
+    "allocation_strategy": "leverage_bernoulli",  # 'shapley_weighted', 'uniform', or 'leverage'
+    "use_direct_estimation": True,  # Use direct weighted estimation
+    "seed": 42,
 }
 
 STRATIFIED_CS_CONFIG = {
-    'n_samples': 50,                      # Total coalition samples
-    'allocation_strategy': 'leverage_bernoulli',  # 'shapley_weighted', 'uniform', or 'leverage'
-    'use_direct_estimation': False,         # Use CS reconstruction
-    'seed': 42,
+    "n_samples": 50,  # Total coalition samples
+    "allocation_strategy": "leverage_bernoulli",  # 'shapley_weighted', 'uniform', or 'leverage'
+    "use_direct_estimation": False,  # Use CS reconstruction
+    "seed": 42,
 }
 
 MULTILINEAR_CONFIG = {
-    'n_quadrature': 11,      # Quadrature points for integration (odd number preferred)
-    'n_samples': 100,        # Total samples across ALL quadrature points (per player)
-    'use_leverage': True,    # Use leverage-based sampling
-    'compute_error_bounds': True,  # Compute rigorous error bounds
-    'confidence': 0.95,      # Confidence level for error bounds
-    'seed': 42,              # Random seed for reproducibility
+    "n_quadrature": 11,  # Quadrature points for integration (odd number preferred)
+    "n_samples": 100,  # Total samples across ALL quadrature points (per player)
+    "use_leverage": True,  # Use leverage-based sampling
+    "compute_error_bounds": True,  # Compute rigorous error bounds
+    "confidence": 0.95,  # Confidence level for error bounds
+    "seed": 42,  # Random seed for reproducibility
 }
 
 # Multilinear with Bernoulli sampling (similar to StratifiedShapley leverage_bernoulli)
 MULTILINEAR_BERNOULLI_CONFIG = {
-    'n_quadrature': None,
-    'n_samples': None,
-    'use_leverage': True,
-    'sampling_method': 'bernoulli',  # Uses oversampling parameter c
-    'leverage_type': 'inverse_coalition',
-    'compute_error_bounds': True,
-    'confidence': 0.95,
-    'seed': 42,
+    "n_quadrature": None,
+    "n_samples": None,
+    "use_leverage": True,
+    "sampling_method": "bernoulli",  # Uses oversampling parameter c
+    "leverage_type": "inverse_coalition",
+    "compute_error_bounds": True,
+    "confidence": 0.95,
+    "seed": 42,
 }
 
 # Plotting configuration
@@ -171,25 +166,27 @@ WEIGHTED_SLOPE_BETA = 0.8
 # DATA READERS
 # ==============================================================================
 
-def housing_data_reader(filename='./data/housing_price.csv'):
+
+def housing_data_reader(filename="./data/housing_price.csv"):
     """Load Boston housing dataset."""
     data = pd.read_csv(filename)
-    X = data.drop(['MEDV'], axis=1)
-    y = data['MEDV']
+    X = data.drop(["MEDV"], axis=1)
+    y = data["MEDV"]
     return X, y
 
 
-def h1n1_data_reader(filename='./data/process_data.csv'):
+def h1n1_data_reader(filename="./data/process_data.csv"):
     """Load H1N1 vaccine dataset."""
     data = pd.read_csv(filename)
-    X = data.drop(['h1n1_vaccine', 'respondent_id', 'seasonal_vaccine'], axis=1)
-    y = data['h1n1_vaccine']
+    X = data.drop(["h1n1_vaccine", "respondent_id", "seasonal_vaccine"], axis=1)
+    y = data["h1n1_vaccine"]
     return X, y
 
 
 # ==============================================================================
 # HELPER FUNCTIONS
 # ==============================================================================
+
 
 def _get_model_params(model):
     """Get model-specific random states and test sizes."""
@@ -211,8 +208,14 @@ def _get_metric_name(model):
     return "$R^2$" if isinstance(model, lgb.LGBMRegressor) else "Accuracy"
 
 
-def _compute_kpi_results(reader, feature_rankings, model, limit=10,
-                        retrain_kpi=False, imputation_strategy='mean'):
+def _compute_kpi_results(
+    reader,
+    feature_rankings,
+    model,
+    limit=10,
+    retrain_kpi=False,
+    imputation_strategy="mean",
+):
     """
     Compute KPI results by progressively dropping features.
 
@@ -243,7 +246,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
 
         # Process each ranking method
         for method, feature_order in feature_rankings.items():
-            feature_order = [feat if isinstance(feat, str) else feat[0] for feat in feature_order]
+            feature_order = [
+                feat if isinstance(feat, str) else feat[0] for feat in feature_order
+            ]
             if limit:
                 feature_order = feature_order[:limit]
 
@@ -275,9 +280,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
 
             weights = [WEIGHTED_SLOPE_BETA**i for i in range(len(deltas))]
             results[method] = {
-                'Features': features,
-                'Metrics': metrics,
-                'Slope': np.dot(deltas, weights) if deltas else 0
+                "Features": features,
+                "Metrics": metrics,
+                "Slope": np.dot(deltas, weights) if deltas else 0,
             }
     else:
         # MASKING MODE: Train once, mask excluded features
@@ -289,14 +294,19 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
         # Compute baseline statistics from training set
         col_means = x_train.mean(numeric_only=True)
         col_modes = {
-            c: (x_train[c].mode(dropna=True).iloc[0]
-                if not pd.api.types.is_numeric_dtype(x_train[c]) and not x_train[c].mode().empty
-                else None)
+            c: (
+                x_train[c].mode(dropna=True).iloc[0]
+                if not pd.api.types.is_numeric_dtype(x_train[c])
+                and not x_train[c].mode().empty
+                else None
+            )
             for c in x_train.columns
         }
 
         # Random number generator for permutation
-        rng = np.random.default_rng(42) if imputation_strategy == 'permutation' else None
+        rng = (
+            np.random.default_rng(42) if imputation_strategy == "permutation" else None
+        )
 
         def mask_features(X_df, keep_cols):
             """Mask features not in keep_cols using specified strategy."""
@@ -304,9 +314,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
             drop_cols = [c for c in X_df.columns if c not in keep_cols]
 
             for c in drop_cols:
-                if imputation_strategy == 'zero':
+                if imputation_strategy == "zero":
                     X_masked[c] = 0
-                elif imputation_strategy == 'permutation':
+                elif imputation_strategy == "permutation":
                     X_masked[c] = rng.permutation(X_masked[c].values)
                 else:  # 'mean' (default)
                     if pd.api.types.is_numeric_dtype(X_masked[c]):
@@ -324,7 +334,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
         # Process each ranking method
         for method, feature_order in feature_rankings.items():
             # Normalize feature order
-            feature_order = [feat if isinstance(feat, str) else feat[0] for feat in feature_order]
+            feature_order = [
+                feat if isinstance(feat, str) else feat[0] for feat in feature_order
+            ]
             if limit:
                 feature_order = feature_order[:limit]
 
@@ -355,9 +367,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
             # Calculate weighted slope
             weights = [WEIGHTED_SLOPE_BETA**i for i in range(len(deltas))]
             results[method] = {
-                'Features': features,
-                'Metrics': metrics,
-                'Slope': np.dot(deltas, weights) if deltas else 0
+                "Features": features,
+                "Metrics": metrics,
+                "Slope": np.dot(deltas, weights) if deltas else 0,
             }
 
     return results
@@ -369,7 +381,9 @@ def _ensure_output_dir():
     return OUTPUT_DIR
 
 
-def _generate_filename(plot_type, dataset, imputation_strategy, no_retrain, retrain_kpi):
+def _generate_filename(
+    plot_type, dataset, imputation_strategy, no_retrain, retrain_kpi
+):
     """
     Generate filename based on configuration.
 
@@ -383,8 +397,8 @@ def _generate_filename(plot_type, dataset, imputation_strategy, no_retrain, retr
     Returns:
         Base filename (without extension)
     """
-    shapley_mode = 'mask' if no_retrain else 'retrain'
-    kpi_mode = 'retrain' if retrain_kpi else 'mask'
+    shapley_mode = "mask" if no_retrain else "retrain"
+    kpi_mode = "retrain" if retrain_kpi else "mask"
     return f"{plot_type}_{dataset}_{imputation_strategy}_shapley-{shapley_mode}_kpi-{kpi_mode}"
 
 
@@ -406,8 +420,8 @@ def _save_plot(base_filename, output_dir=None):
 
     # Save PDF
     pdf_path = output_dir / f"{base_filename}.pdf"
-    plt.savefig(pdf_path, bbox_inches='tight')
-    saved_files['pdf'] = str(pdf_path)
+    plt.savefig(pdf_path, bbox_inches="tight")
+    saved_files["pdf"] = str(pdf_path)
 
     print(f"Saved plots:")
     print(f"  PDF: {pdf_path}")
@@ -415,7 +429,14 @@ def _save_plot(base_filename, output_dir=None):
     return saved_files
 
 
-def _export_feature_rankings_csv(feature_rankings, dataset, imputation_strategy, no_retrain, retrain_kpi, output_dir=None):
+def _export_feature_rankings_csv(
+    feature_rankings,
+    dataset,
+    imputation_strategy,
+    no_retrain,
+    retrain_kpi,
+    output_dir=None,
+):
     """
     Export feature rankings to CSV file.
 
@@ -443,18 +464,18 @@ def _export_feature_rankings_csv(feature_rankings, dataset, imputation_strategy,
     max_features = max(len(ranking) for ranking in feature_rankings.values())
 
     # Create DataFrame
-    data = {'Top-N': list(range(1, max_features + 1))}
+    data = {"Top-N": list(range(1, max_features + 1))}
 
     for method, ranking in sorted(feature_rankings.items()):
         # Pad with empty strings if needed
-        padded_ranking = ranking + [''] * (max_features - len(ranking))
+        padded_ranking = ranking + [""] * (max_features - len(ranking))
         data[method] = padded_ranking
 
     df = pd.DataFrame(data)
 
     # Generate filename with both Shapley and KPI modes
-    shapley_mode = 'mask' if no_retrain else 'retrain'
-    kpi_mode = 'retrain' if retrain_kpi else 'mask'
+    shapley_mode = "mask" if no_retrain else "retrain"
+    kpi_mode = "retrain" if retrain_kpi else "mask"
     csv_filename = f"rankings_{dataset}_{imputation_strategy}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
     csv_path = output_dir / csv_filename
 
@@ -495,19 +516,23 @@ def _print_feature_ranking_table(feature_rankings, limit=10):
     print("-" * len(header))
 
     # Print rows
-    max_features = min(limit, max(len(ranking) for ranking in feature_rankings.values()))
+    max_features = min(
+        limit, max(len(ranking) for ranking in feature_rankings.values())
+    )
     for i in range(max_features):
         row = f"{i+1:<8}"
         for method in methods:
             ranking = feature_rankings[method]
-            feature = ranking[i] if i < len(ranking) else ''
+            feature = ranking[i] if i < len(ranking) else ""
             row += f" {feature:<{col_width}}"
         print(row)
 
     print("=" * 100)
 
 
-def _export_time_comparison_csv(time_results, dataset, imputation_strategy, no_retrain, retrain_kpi, output_dir=None):
+def _export_time_comparison_csv(
+    time_results, dataset, imputation_strategy, no_retrain, retrain_kpi, output_dir=None
+):
     """
     Export execution time comparison to CSV file.
 
@@ -539,15 +564,15 @@ def _export_time_comparison_csv(time_results, dataset, imputation_strategy, no_r
 
     # Create DataFrame
     data = {
-        'Method': [method for method, _ in sorted_times],
-        'Time (seconds)': [time for _, time in sorted_times],
-        'Relative Speed': [f"{time/fastest_time:.2f}x" for _, time in sorted_times]
+        "Method": [method for method, _ in sorted_times],
+        "Time (seconds)": [time for _, time in sorted_times],
+        "Relative Speed": [f"{time/fastest_time:.2f}x" for _, time in sorted_times],
     }
     df = pd.DataFrame(data)
 
     # Generate filename
-    shapley_mode = 'mask' if no_retrain else 'retrain'
-    kpi_mode = 'retrain' if retrain_kpi else 'mask'
+    shapley_mode = "mask" if no_retrain else "retrain"
+    kpi_mode = "retrain" if retrain_kpi else "mask"
     csv_filename = f"time_{dataset}_{imputation_strategy}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
     csv_path = output_dir / csv_filename
 
@@ -558,7 +583,9 @@ def _export_time_comparison_csv(time_results, dataset, imputation_strategy, no_r
     return str(csv_path)
 
 
-def _export_kpi_metrics_csv(kpi_results, dataset, imputation_strategy, no_retrain, retrain_kpi, output_dir=None):
+def _export_kpi_metrics_csv(
+    kpi_results, dataset, imputation_strategy, no_retrain, retrain_kpi, output_dir=None
+):
     """
     Export KPI metrics (S values and metric sequences) to CSV file.
 
@@ -583,34 +610,34 @@ def _export_kpi_metrics_csv(kpi_results, dataset, imputation_strategy, no_retrai
         output_dir = _ensure_output_dir()
 
     # Determine maximum number of metrics across all methods
-    max_metrics = max(len(result['Metrics']) for result in kpi_results.values())
+    max_metrics = max(len(result["Metrics"]) for result in kpi_results.values())
 
     # Create DataFrame
-    data = {'Method': [], 'Weighted Slope (S)': []}
+    data = {"Method": [], "Weighted Slope (S)": []}
 
     # Add metric columns
     for i in range(max_metrics):
-        data[f'Metric_{i}'] = []
+        data[f"Metric_{i}"] = []
 
     # Populate data
     for method in sorted(kpi_results.keys()):
         result = kpi_results[method]
-        data['Method'].append(method)
-        data['Weighted Slope (S)'].append(result['Slope'])
+        data["Method"].append(method)
+        data["Weighted Slope (S)"].append(result["Slope"])
 
         # Add metrics, padding with empty strings if needed
-        metrics = result['Metrics']
+        metrics = result["Metrics"]
         for i in range(max_metrics):
             if i < len(metrics):
-                data[f'Metric_{i}'].append(metrics[i])
+                data[f"Metric_{i}"].append(metrics[i])
             else:
-                data[f'Metric_{i}'].append('')
+                data[f"Metric_{i}"].append("")
 
     df = pd.DataFrame(data)
 
     # Generate filename
-    shapley_mode = 'mask' if no_retrain else 'retrain'
-    kpi_mode = 'retrain' if retrain_kpi else 'mask'
+    shapley_mode = "mask" if no_retrain else "retrain"
+    kpi_mode = "retrain" if retrain_kpi else "mask"
     csv_filename = f"kpi_metrics_{dataset}_{imputation_strategy}_shapley-{shapley_mode}_kpi-{kpi_mode}.csv"
     csv_path = output_dir / csv_filename
 
@@ -666,7 +693,10 @@ def node_to_feature_name(node, columns):
 # CACHE MANAGEMENT
 # ==============================================================================
 
-def _get_cache_filename(reader, imputation_strategy='mean', no_retrain=True, retrain_kpi=False):
+
+def _get_cache_filename(
+    reader, imputation_strategy="mean", no_retrain=True, retrain_kpi=False
+):
     """
     Generate cache filename based on dataset name and configuration.
 
@@ -679,13 +709,13 @@ def _get_cache_filename(reader, imputation_strategy='mean', no_retrain=True, ret
     Returns:
         Full path to cache file in output directory
     """
-    dataset_name = reader.__name__.replace('_data_reader', '')
+    dataset_name = reader.__name__.replace("_data_reader", "")
 
     # Shapley mode: mask or retrain
-    shapley_mode = 'mask' if no_retrain else 'retrain'
+    shapley_mode = "mask" if no_retrain else "retrain"
 
     # KPI mode: mask or retrain
-    kpi_mode = 'retrain' if retrain_kpi else 'mask'
+    kpi_mode = "retrain" if retrain_kpi else "mask"
 
     # Save to output directory
     output_dir = _ensure_output_dir()
@@ -703,13 +733,15 @@ def _load_cache(cache_file):
     print(f"Loading all cached results from {cache_file}...")
     print("=" * 60)
 
-    with open(cache_file, 'rb') as f:
+    with open(cache_file, "rb") as f:
         cached_data = pickle.load(f)
 
     print(f"Successfully loaded cached results!")
     print(f"  - Shapley methods: {len(cached_data.get('time_results', {}))}")
     print(f"  - KPI results: {'Yes' if cached_data.get('kpi_results') else 'No'}")
-    print(f"  - Example time (ShapG): {cached_data.get('time_results', {}).get('ShapG', 0):.2f}s")
+    print(
+        f"  - Example time (ShapG): {cached_data.get('time_results', {}).get('ShapG', 0):.2f}s"
+    )
 
     return cached_data
 
@@ -720,7 +752,7 @@ def _save_cache(cache_file, **data):
     print("Saving all results to unified cache...")
     print("=" * 60)
 
-    with open(cache_file, 'wb') as f:
+    with open(cache_file, "wb") as f:
         pickle.dump(data, f)
 
     print(f"Saved all results (Shapley values, timing, and KPI) to {cache_file}")
@@ -729,6 +761,7 @@ def _save_cache(cache_file, **data):
 # ==============================================================================
 # CHARACTERISTIC FUNCTION
 # ==============================================================================
+
 
 def _train_model_once(X, y, model):
     """
@@ -758,8 +791,16 @@ def _train_model_once(X, y, model):
     return model, X_train, X_test, y_test
 
 
-def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_full,
-                                   use_masking=True, imputation_strategy='mean'):
+def _create_characteristic_function(
+    model,
+    X_train,
+    X_test,
+    y_test,
+    X_full,
+    y_full,
+    use_masking=True,
+    imputation_strategy="mean",
+):
     """
     Create characteristic function for regression or classification task.
 
@@ -785,25 +826,29 @@ def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_fu
 
     if use_masking:
         # FAST: Use pre-trained model with masking for coalitions
-        print(f"Using efficient masking approach with '{imputation_strategy}' imputation")
+        print(
+            f"Using efficient masking approach with '{imputation_strategy}' imputation"
+        )
 
         # ✓ CRITICAL: Compute baseline from TRAINING set, not test set!
         baseline = X_train.mean().values
 
         return GraphModelCharacteristic(
             model=model,  # Pre-trained model passed as parameter
-            X=X_test,     # Evaluate on test set
+            X=X_test,  # Evaluate on test set
             y=y_test,
             masking_strategy=imputation_strategy,  # Use specified strategy
             metric_fn=metric_fn,
             baseline=baseline,  # ✓ Use training set statistics!
-            name=f"{task_type} {metric_name} (Masking-{imputation_strategy})"
+            name=f"{task_type} {metric_name} (Masking-{imputation_strategy})",
         )
     else:
         # SLOW: Retrain model for each coalition (original approach)
         print("Using retraining approach (slower, for comparison)")
 
-        def characteristic_function_wrapper(coalition: Set[int], context: nx.Graph) -> float:
+        def characteristic_function_wrapper(
+            coalition: Set[int], context: nx.Graph
+        ) -> float:
             """Compute metric score for coalition of features."""
             if len(coalition) == 0:
                 return 0
@@ -817,20 +862,28 @@ def _create_characteristic_function(model, X_train, X_test, y_test, X_full, y_fu
             )
 
             if is_classifier:
-                lgb_model = lgb.LGBMClassifier(learning_rate=0.3, verbosity=-1, device='mps')
+                lgb_model = lgb.LGBMClassifier(
+                    learning_rate=0.3, verbosity=-1, device="mps"
+                )
             else:
-                lgb_model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1, device='mps')
+                lgb_model = lgb.LGBMRegressor(
+                    learning_rate=0.3, verbosity=-1, device="mps"
+                )
 
             lgb_model.fit(X_tr, y_tr)
             y_pred = lgb_model.predict(X_te)
             return metric_fn(y_te, y_pred)
 
-        return CustomFunction(characteristic_function_wrapper, name=f"{task_type} {metric_name} (Retraining)")
+        return CustomFunction(
+            characteristic_function_wrapper,
+            name=f"{task_type} {metric_name} (Retraining)",
+        )
 
 
 # ==============================================================================
 # EXPLAINER COMPUTATION
 # ==============================================================================
+
 
 def _compute_all_explainers(G, custom_char_func, X):
     """
@@ -846,50 +899,45 @@ def _compute_all_explainers(G, custom_char_func, X):
     print("\nComputing Shapley values using ShapGExplainer...")
     start_time = time.time()
     shapg_explainer = ShapGExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True,
-        **SHAPG_CONFIG
+        characteristic_function=custom_char_func, verbose=True, **SHAPG_CONFIG
     )
-    all_values['shapley'] = shapg_explainer.fit_explain(G)
-    time_results['ShapG'] = time.time() - start_time
+    all_values["shapley"] = shapg_explainer.fit_explain(G)
+    time_results["ShapG"] = time.time() - start_time
     print(f"  Time: {time_results['ShapG']:.2f}s")
 
     # 2. CIS
     print("\nComputing CIS values...")
     start_time = time.time()
     cis_explainer = CISExplainer(
-        characteristic_function=custom_char_func,
-        verbose=False
+        characteristic_function=custom_char_func, verbose=False
     )
-    all_values['cis'] = cis_explainer.fit_explain(G)
-    time_results['CIS'] = time.time() - start_time
+    all_values["cis"] = cis_explainer.fit_explain(G)
+    time_results["CIS"] = time.time() - start_time
     print(f"  Time: {time_results['CIS']:.2f}s")
 
     # 3. Random CS
     print("\nComputing Random CS Shapley values...")
     start_time = time.time()
     random_cs_explainer = RandomCSExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True,
-        **RANDOM_CS_CONFIG
+        characteristic_function=custom_char_func, verbose=True, **RANDOM_CS_CONFIG
     )
-    all_values['random_cs'] = random_cs_explainer.fit_explain(G)
-    time_results['RandomCS'] = time.time() - start_time
+    all_values["random_cs"] = random_cs_explainer.fit_explain(G)
+    time_results["RandomCS"] = time.time() - start_time
     print(f"  Time: {time_results['RandomCS']:.2f}s")
 
     # 4. QR-CS
     print("\nComputing QR-CS Shapley values...")
     print("Using CVXPY for L1 minimization (much faster than scipy)")
     start_time = time.time()
-    n_measurements = min(100, 2**(len(X.columns)-1) // 4)
+    n_measurements = min(100, 2 ** (len(X.columns) - 1) // 4)
     qrcs_explainer = QRCSExplainer(
         characteristic_function=custom_char_func,
         n_measurements=n_measurements,
         use_fast_fallback=False,
-        verbose=True
+        verbose=True,
     )
-    all_values['qrcs'] = qrcs_explainer.fit_explain(G)
-    time_results['QR-CS'] = time.time() - start_time
+    all_values["qrcs"] = qrcs_explainer.fit_explain(G)
+    time_results["QR-CS"] = time.time() - start_time
     print(f"  Time: {time_results['QR-CS']:.2f}s")
 
     # 5. Block QR-CS
@@ -902,10 +950,10 @@ def _compute_all_explainers(G, custom_char_func, X):
         n_blocks=n_blocks,
         parallel=False,
         use_fast_fallback=False,
-        verbose=True
+        verbose=True,
     )
-    all_values['block_qrcs'] = block_qrcs_explainer.fit_explain(G)
-    time_results['BlockQRCS'] = time.time() - start_time
+    all_values["block_qrcs"] = block_qrcs_explainer.fit_explain(G)
+    time_results["BlockQRCS"] = time.time() - start_time
     print(f"  Time: {time_results['BlockQRCS']:.2f}s")
 
     # 6. Improved QR-CS
@@ -916,10 +964,10 @@ def _compute_all_explainers(G, custom_char_func, X):
         characteristic_function=custom_char_func,
         n_measurements=n_measurements,
         verbose=True,
-        **IMPROVED_QRCS_CONFIG
+        **IMPROVED_QRCS_CONFIG,
     )
-    all_values['improved_qrcs'] = improved_qrcs_explainer.fit_explain(G)
-    time_results['ImprovedQRCS'] = time.time() - start_time
+    all_values["improved_qrcs"] = improved_qrcs_explainer.fit_explain(G)
+    time_results["ImprovedQRCS"] = time.time() - start_time
 
     sparsity_info = improved_qrcs_explainer.get_sparsity_info()
     print(f"  Detected sparsity: {sparsity_info['detected_sparsity']*100:.1f}%")
@@ -935,17 +983,21 @@ def _compute_all_explainers(G, custom_char_func, X):
         n_blocks=n_blocks,
         parallel=True,
         verbose=True,
-        **IMPROVED_QRCS_CONFIG
+        **IMPROVED_QRCS_CONFIG,
     )
-    all_values['improved_block_qrcs'] = improved_block_qrcs_explainer.fit_explain(G)
-    time_results['ImprovedBlockQRCS'] = time.time() - start_time
+    all_values["improved_block_qrcs"] = improved_block_qrcs_explainer.fit_explain(G)
+    time_results["ImprovedBlockQRCS"] = time.time() - start_time
 
     block_info = improved_block_qrcs_explainer.get_block_sparsity_info()
-    if 'avg_sparsity' in block_info:
+    if "avg_sparsity" in block_info:
         print(f"\nBlock sparsity statistics:")
         print(f"  Average sparsity: {block_info['avg_sparsity']*100:.1f}%")
-        print(f"  Blocks using CS: {block_info['blocks_using_cs']}/{block_info['n_blocks']}")
-        print(f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}")
+        print(
+            f"  Blocks using CS: {block_info['blocks_using_cs']}/{block_info['n_blocks']}"
+        )
+        print(
+            f"  Blocks using fast: {block_info['blocks_using_fast']}/{block_info['n_blocks']}"
+        )
     print(f"  Time: {time_results['ImprovedBlockQRCS']:.2f}s")
 
     # 8. Stratified Shapley - Direct Estimation
@@ -955,10 +1007,10 @@ def _compute_all_explainers(G, custom_char_func, X):
     stratified_direct_explainer = StratifiedShapleyExplainer(
         characteristic_function=custom_char_func,
         verbose=True,
-        **STRATIFIED_DIRECT_CONFIG
+        **STRATIFIED_DIRECT_CONFIG,
     )
-    all_values['stratified_direct'] = stratified_direct_explainer.fit_explain(G)
-    time_results['Stratified-Direct'] = time.time() - start_time
+    all_values["stratified_direct"] = stratified_direct_explainer.fit_explain(G)
+    time_results["Stratified-Direct"] = time.time() - start_time
 
     # Print sampling statistics
     stratified_stats = stratified_direct_explainer.get_sampling_stats()
@@ -974,20 +1026,22 @@ def _compute_all_explainers(G, custom_char_func, X):
     print("Using stratified coalition sampling with compressed sensing reconstruction")
     start_time = time.time()
     stratified_cs_explainer = StratifiedShapleyExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True,
-        **STRATIFIED_CS_CONFIG
+        characteristic_function=custom_char_func, verbose=True, **STRATIFIED_CS_CONFIG
     )
-    all_values['stratified_cs'] = stratified_cs_explainer.fit_explain(G)
-    time_results['Stratified-CS'] = time.time() - start_time
+    all_values["stratified_cs"] = stratified_cs_explainer.fit_explain(G)
+    time_results["Stratified-CS"] = time.time() - start_time
 
     # Print sampling statistics
     stratified_cs_stats = stratified_cs_explainer.get_sampling_stats()
     if stratified_cs_stats:
         print(f"\nStratified CS Sampling Statistics:")
         print(f"  Total samples: {stratified_cs_stats.total_budget}")
-        nonzero_strata = sum(1 for a in stratified_cs_stats.allocations_by_size if a > 0)
-        print(f"  Strata with samples: {nonzero_strata}/{stratified_cs_stats.n_players}")
+        nonzero_strata = sum(
+            1 for a in stratified_cs_stats.allocations_by_size if a > 0
+        )
+        print(
+            f"  Strata with samples: {nonzero_strata}/{stratified_cs_stats.n_players}"
+        )
     print(f"  Time: {time_results['Stratified-CS']:.2f}s")
 
     # 10. Leverage SHAP
@@ -995,12 +1049,10 @@ def _compute_all_explainers(G, custom_char_func, X):
     print("Using leverage score sampling with provable O(n log n) guarantees")
     start_time = time.time()
     leverage_explainer = LeverageScoreExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True,
-        **LEVERAGE_SHAP_CONFIG
+        characteristic_function=custom_char_func, verbose=True, **LEVERAGE_SHAP_CONFIG
     )
-    all_values['leverage_shap'] = leverage_explainer.fit_explain(G)
-    time_results['LeverageSHAP'] = time.time() - start_time
+    all_values["leverage_shap"] = leverage_explainer.fit_explain(G)
+    time_results["LeverageSHAP"] = time.time() - start_time
     print(f"  Time: {time_results['LeverageSHAP']:.2f}s")
     print("  Achieved ~50% error reduction compared to Kernel SHAP (based on paper)")
 
@@ -1009,62 +1061,70 @@ def _compute_all_explainers(G, custom_char_func, X):
     print("Using Owen's multilinear extension + naive Bernoulli sampling")
     start_time = time.time()
     multilinear_naive_config = {k: v for k, v in MULTILINEAR_CONFIG.items()}
-    multilinear_naive_config['use_leverage'] = False
-    multilinear_naive_config['compute_error_bounds'] = False
+    multilinear_naive_config["use_leverage"] = False
+    multilinear_naive_config["compute_error_bounds"] = False
     multilinear_naive_explainer = MultilinearExplainer(
         characteristic_function=custom_char_func,
         verbose=True,
-        **multilinear_naive_config
+        **multilinear_naive_config,
     )
-    all_values['multilinear_naive'] = multilinear_naive_explainer.fit_explain(G)
-    time_results['Multilinear-Naive'] = time.time() - start_time
+    all_values["multilinear_naive"] = multilinear_naive_explainer.fit_explain(G)
+    time_results["Multilinear-Naive"] = time.time() - start_time
 
     ml_naive_stats = multilinear_naive_explainer.get_computation_stats()
     print(f"  Method used: {ml_naive_stats.get('method_used', 'N/A')}")
     print(f"  Time: {time_results['Multilinear-Naive']:.2f}s")
 
     # 12. Multilinear Extension with Shapley-Weighted Leverage
-    print("\nComputing Multilinear Extension Shapley values (Shapley-weighted leverage)...")
+    print(
+        "\nComputing Multilinear Extension Shapley values (Shapley-weighted leverage)..."
+    )
     print("Using Owen's multilinear extension + Shapley-weighted leverage sampling")
     start_time = time.time()
     multilinear_sw_config = {k: v for k, v in MULTILINEAR_CONFIG.items()}
-    multilinear_sw_config['leverage_type'] = 'shapley_weighted'
+    multilinear_sw_config["leverage_type"] = "shapley_weighted"
     multilinear_sw_explainer = MultilinearExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True,
-        **multilinear_sw_config
+        characteristic_function=custom_char_func, verbose=True, **multilinear_sw_config
     )
-    all_values['multilinear_shapley_weighted'] = multilinear_sw_explainer.fit_explain(G)
-    time_results['Multilinear-ShapleyWeight'] = time.time() - start_time
+    all_values["multilinear_shapley_weighted"] = multilinear_sw_explainer.fit_explain(G)
+    time_results["Multilinear-ShapleyWeight"] = time.time() - start_time
 
     ml_sw_stats = multilinear_sw_explainer.get_computation_stats()
     print(f"  Method used: {ml_sw_stats.get('method_used', 'N/A')}")
     print(f"  Leverage type: {ml_sw_stats.get('leverage_type', 'N/A')}")
     error_bounds = multilinear_sw_explainer.get_error_bounds()
     if error_bounds:
-        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
+        print(
+            f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})"
+        )
     print(f"  Time: {time_results['Multilinear-ShapleyWeight']:.2f}s")
 
     # 13. Multilinear Extension with Inverse-Coalition Leverage (Musco & Witter 2025)
-    print("\nComputing Multilinear Extension Shapley values (inverse-coalition leverage)...")
-    print("Using Owen's multilinear extension + inverse-coalition leverage (Musco & Witter 2025)")
+    print(
+        "\nComputing Multilinear Extension Shapley values (inverse-coalition leverage)..."
+    )
+    print(
+        "Using Owen's multilinear extension + inverse-coalition leverage (Musco & Witter 2025)"
+    )
     start_time = time.time()
     multilinear_ic_config = {k: v for k, v in MULTILINEAR_CONFIG.items()}
-    multilinear_ic_config['leverage_type'] = 'inverse_coalition'
+    multilinear_ic_config["leverage_type"] = "inverse_coalition"
     multilinear_ic_explainer = MultilinearExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True,
-        **multilinear_ic_config
+        characteristic_function=custom_char_func, verbose=True, **multilinear_ic_config
     )
-    all_values['multilinear_inverse_coalition'] = multilinear_ic_explainer.fit_explain(G)
-    time_results['Multilinear-InverseCoalition'] = time.time() - start_time
+    all_values["multilinear_inverse_coalition"] = multilinear_ic_explainer.fit_explain(
+        G
+    )
+    time_results["Multilinear-InverseCoalition"] = time.time() - start_time
 
     ml_ic_stats = multilinear_ic_explainer.get_computation_stats()
     print(f"  Method used: {ml_ic_stats.get('method_used', 'N/A')}")
     print(f"  Leverage type: {ml_ic_stats.get('leverage_type', 'N/A')}")
     error_bounds = multilinear_ic_explainer.get_error_bounds()
     if error_bounds:
-        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
+        print(
+            f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})"
+        )
     print(f"  Time: {time_results['Multilinear-InverseCoalition']:.2f}s")
 
     # 14. Multilinear Extension with Bernoulli Sampling (similar to leverage_bernoulli)
@@ -1074,10 +1134,10 @@ def _compute_all_explainers(G, custom_char_func, X):
     multilinear_bern_explainer = MultilinearExplainer(
         characteristic_function=custom_char_func,
         verbose=True,
-        **MULTILINEAR_BERNOULLI_CONFIG
+        **MULTILINEAR_BERNOULLI_CONFIG,
     )
-    all_values['multilinear_bernoulli'] = multilinear_bern_explainer.fit_explain(G)
-    time_results['Multilinear-Bernoulli'] = time.time() - start_time
+    all_values["multilinear_bernoulli"] = multilinear_bern_explainer.fit_explain(G)
+    time_results["Multilinear-Bernoulli"] = time.time() - start_time
 
     ml_bern_stats = multilinear_bern_explainer.get_computation_stats()
     print(f"  Method used: {ml_bern_stats.get('method_used', 'N/A')}")
@@ -1102,7 +1162,9 @@ def _compute_all_explainers(G, custom_char_func, X):
             print(f"    size {s}: {count} ({pct:.1f}%)")
     error_bounds = multilinear_bern_explainer.get_error_bounds()
     if error_bounds:
-        print(f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})")
+        print(
+            f"  Error bound: {error_bounds.total_error:.2e} (conf={error_bounds.confidence_level:.0%})"
+        )
     print(f"  Time: {time_results['Multilinear-Bernoulli']:.2f}s")
 
     return all_values, time_results
@@ -1119,25 +1181,27 @@ def _convert_to_feature_rankings(all_values, X, model, y):
 
     # Standard methods
     methods_mapping = {
-        'ShapG': 'shapley',
-        'CIS': 'cis',
-        'RandomCS': 'random_cs',
-        'QR-CS': 'qrcs',
-        'BlockQRCS': 'block_qrcs',
-        'ImprovedQRCS': 'improved_qrcs',
-        'ImprovedBlockQRCS': 'improved_block_qrcs',
-        'Stratified-Direct': 'stratified_direct',
-        'Stratified-CS': 'stratified_cs',
-        'LeverageSHAP': 'leverage_shap',
-        'Multilinear-Naive': 'multilinear_naive',
-        'Multilinear-ShapleyWeight': 'multilinear_shapley_weighted',
-        'Multilinear-InverseCoalition': 'multilinear_inverse_coalition',
-        'Multilinear-Bernoulli': 'multilinear_bernoulli',
+        "ShapG": "shapley",
+        "CIS": "cis",
+        "RandomCS": "random_cs",
+        "QR-CS": "qrcs",
+        "BlockQRCS": "block_qrcs",
+        "ImprovedQRCS": "improved_qrcs",
+        "ImprovedBlockQRCS": "improved_block_qrcs",
+        "Stratified-Direct": "stratified_direct",
+        "Stratified-CS": "stratified_cs",
+        "LeverageSHAP": "leverage_shap",
+        "Multilinear-Naive": "multilinear_naive",
+        "Multilinear-ShapleyWeight": "multilinear_shapley_weighted",
+        "Multilinear-InverseCoalition": "multilinear_inverse_coalition",
+        "Multilinear-Bernoulli": "multilinear_bernoulli",
     }
 
     for display_name, key in methods_mapping.items():
         if key in all_values:
-            sorted_values = sorted(all_values[key].items(), key=lambda x: x[1], reverse=True)
+            sorted_values = sorted(
+                all_values[key].items(), key=lambda x: x[1], reverse=True
+            )
             feature_rankings[display_name] = [
                 node_to_feature_name(node, X.columns)
                 for node, _ in sorted_values
@@ -1145,23 +1209,23 @@ def _convert_to_feature_rankings(all_values, X, model, y):
             ]
 
     # Add model feature importances if available
-    if model and hasattr(model, 'feature_importances_'):
+    if model and hasattr(model, "feature_importances_"):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
         model.fit(X_train, y_train)
         importances = model.feature_importances_
         feature_indices = np.argsort(importances)[::-1]
-        feature_rankings['Model'] = [X.columns[i] for i in feature_indices]
+        feature_rankings["Model"] = [X.columns[i] for i in feature_indices]
 
     return feature_rankings
 
 
 def _test_improved_graphs(X, y, custom_char_func, feature_rankings, time_results):
     """Test improved graph construction methods."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Testing improved graph construction methods...")
-    print("="*60)
+    print("=" * 60)
 
     builder = GraphBuilder()
     improved_shapley_values = {}
@@ -1173,29 +1237,32 @@ def _test_improved_graphs(X, y, custom_char_func, feature_rankings, time_results
         density_label = f"{density}" if density is not None else "auto"
         print(f"\nBuilding improved graph with density={density_label}...")
 
-        for rank_method in ['cosine', 'kendalltau', 'mutual_info']:
+        for rank_method in ["cosine", "kendalltau", "mutual_info"]:
             G_improved = builder.from_rank_deletion(
-                X, y,
+                X,
+                y,
                 density_ratio=density,
                 correlation_method=rank_method,
-                similarity_method=rank_method
+                similarity_method=rank_method,
             )
-            print(f"Improved graph has {G_improved.number_of_nodes()} nodes and {G_improved.number_of_edges()} edges")
+            print(
+                f"Improved graph has {G_improved.number_of_nodes()} nodes and {G_improved.number_of_edges()} edges"
+            )
 
             # Compute ShapG with improved graph
             print(f"Computing ShapG with improved graph (density={density_label})...")
             start_time = time.time()
             shapg_improved = ShapGExplainer(
-                characteristic_function=custom_char_func,
-                verbose=False,
-                **SHAPG_CONFIG
+                characteristic_function=custom_char_func, verbose=False, **SHAPG_CONFIG
             )
             improved_values = shapg_improved.fit_explain(G_improved)
             elapsed_time = time.time() - start_time
 
             # Add to feature rankings
-            sorted_improved = sorted(improved_values.items(), key=lambda x: x[1], reverse=True)
-            method_name = f'Improved ShapG-{rank_method}-{density_label}'
+            sorted_improved = sorted(
+                improved_values.items(), key=lambda x: x[1], reverse=True
+            )
+            method_name = f"Improved ShapG-{rank_method}-{density_label}"
             feature_rankings[method_name] = [
                 node_to_feature_name(node, X.columns)
                 for node, _ in sorted_improved
@@ -1204,7 +1271,9 @@ def _test_improved_graphs(X, y, custom_char_func, feature_rankings, time_results
             improved_shapley_values[method_name] = improved_values
             time_results[method_name] = elapsed_time
 
-            print(f"  Completed improved graph benchmark (density={density_label}, time={elapsed_time:.2f}s)")
+            print(
+                f"  Completed improved graph benchmark (density={density_label}, time={elapsed_time:.2f}s)"
+            )
 
     return improved_shapley_values
 
@@ -1213,9 +1282,18 @@ def _test_improved_graphs(X, y, custom_char_func, feature_rankings, time_results
 # VISUALIZATION FUNCTIONS
 # ==============================================================================
 
-def plot_KPI_comparison_by_dict(reader, feature_rankings, model, dataset,
-                                limit=10, cached_kpi_results=None,
-                                no_retrain=True, retrain_kpi=False, imputation_strategy='mean'):
+
+def plot_KPI_comparison_by_dict(
+    reader,
+    feature_rankings,
+    model,
+    dataset,
+    limit=10,
+    cached_kpi_results=None,
+    no_retrain=True,
+    retrain_kpi=False,
+    imputation_strategy="mean",
+):
     """
     Plot comparison of feature importance methods using KPI metrics.
 
@@ -1242,9 +1320,14 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, dataset,
     else:
         mode_desc = "retraining" if retrain_kpi else f"masking ({imputation_strategy})"
         print(f"Computing KPI results (no cache) using {mode_desc}...")
-        results = _compute_kpi_results(reader, feature_rankings, model, limit,
-                                      retrain_kpi=retrain_kpi,
-                                      imputation_strategy=imputation_strategy)
+        results = _compute_kpi_results(
+            reader,
+            feature_rankings,
+            model,
+            limit,
+            retrain_kpi=retrain_kpi,
+            imputation_strategy=imputation_strategy,
+        )
 
     # Create plot
     plt.figure(figsize=PLOT_FIGSIZE)
@@ -1253,26 +1336,29 @@ def plot_KPI_comparison_by_dict(reader, feature_rankings, model, dataset,
     for method, data in results.items():
         label = f'{method} $S$={data["Slope"]:.4f}'
         plt.plot(
-            range(len(data['Metrics'])),
-            data['Metrics'],
-            label=label,
-            alpha=PLOT_ALPHA
+            range(len(data["Metrics"])), data["Metrics"], label=label, alpha=PLOT_ALPHA
         )
 
-    plt.xlabel('Number of Features Dropped')
+    plt.xlabel("Number of Features Dropped")
     plt.ylabel(metric_name)
-    plt.title(f'Comparison of {metric_name} after dropping features (New API - {model_name})')
+    plt.title(
+        f"Comparison of {metric_name} after dropping features (New API - {model_name})"
+    )
     plt.legend()
     plt.grid()
 
     # Generate filename and save
-    base_filename = _generate_filename('KPI', dataset, imputation_strategy, no_retrain, retrain_kpi)
+    base_filename = _generate_filename(
+        "KPI", dataset, imputation_strategy, no_retrain, retrain_kpi
+    )
     saved_files = _save_plot(base_filename)
 
     return results, saved_files
 
 
-def plot_time_comparison(time_results, dataset, imputation_strategy, no_retrain, retrain_kpi):
+def plot_time_comparison(
+    time_results, dataset, imputation_strategy, no_retrain, retrain_kpi
+):
     """
     Plot horizontal bar chart comparing algorithm execution times.
 
@@ -1293,21 +1379,30 @@ def plot_time_comparison(time_results, dataset, imputation_strategy, no_retrain,
     # Create horizontal bar chart
     plt.figure(figsize=PLOT_FIGSIZE)
     colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(algorithms)))
-    bars = plt.barh(algorithms, times, color=colors, alpha=0.7, edgecolor='black')
+    bars = plt.barh(algorithms, times, color=colors, alpha=0.7, edgecolor="black")
 
     # Add value labels on bars
     for i, (bar, time_val) in enumerate(zip(bars, times)):
-        plt.text(time_val, i, f' {time_val:.2f}s',
-                va='center', ha='left', fontweight='bold', fontsize=10)
+        plt.text(
+            time_val,
+            i,
+            f" {time_val:.2f}s",
+            va="center",
+            ha="left",
+            fontweight="bold",
+            fontsize=10,
+        )
 
-    plt.xlabel('Execution Time (seconds)', fontsize=12, fontweight='bold')
-    plt.ylabel('Algorithm', fontsize=12, fontweight='bold')
-    plt.title('Algorithm Execution Time Comparison', fontsize=14, fontweight='bold')
-    plt.grid(axis='x', alpha=0.3, linestyle='--')
+    plt.xlabel("Execution Time (seconds)", fontsize=12, fontweight="bold")
+    plt.ylabel("Algorithm", fontsize=12, fontweight="bold")
+    plt.title("Algorithm Execution Time Comparison", fontsize=14, fontweight="bold")
+    plt.grid(axis="x", alpha=0.3, linestyle="--")
     plt.tight_layout()
 
     # Generate filename and save
-    base_filename = _generate_filename('time_comparison', dataset, imputation_strategy, no_retrain, retrain_kpi)
+    base_filename = _generate_filename(
+        "time_comparison", dataset, imputation_strategy, no_retrain, retrain_kpi
+    )
     saved_files = _save_plot(base_filename)
 
     return sorted_items, saved_files
@@ -1317,10 +1412,18 @@ def plot_time_comparison(time_results, dataset, imputation_strategy, no_retrain,
 # MAIN BENCHMARK FUNCTION
 # ==============================================================================
 
-def benchmark_feature_importance(reader, model, dataset, limit=10,
-                                 test_improved_graphs=True, use_cache=True,
-                                 no_retrain=True, retrain_kpi=False,
-                                 imputation_strategy='mean'):
+
+def benchmark_feature_importance(
+    reader,
+    model,
+    dataset,
+    limit=10,
+    test_improved_graphs=True,
+    use_cache=True,
+    no_retrain=True,
+    retrain_kpi=False,
+    imputation_strategy="mean",
+):
     """
     Benchmark feature importance using NEW modular API.
 
@@ -1353,30 +1456,38 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
     X, y = reader()
 
     # Check cache (use configuration-specific cache)
-    cache_file = _get_cache_filename(reader, imputation_strategy, no_retrain, retrain_kpi)
+    cache_file = _get_cache_filename(
+        reader, imputation_strategy, no_retrain, retrain_kpi
+    )
     cached_data = _load_cache(cache_file) if use_cache else None
 
     if cached_data:
         # Unpack cached results
         all_values = {
-            'shapley': cached_data['shapley_values'],
-            'cis': cached_data['cis_values'],
-            'random_cs': cached_data['random_cs_values'],
-            'qrcs': cached_data['qrcs_values'],
-            'block_qrcs': cached_data['block_qrcs_values'],
-            'improved_qrcs': cached_data['improved_qrcs_values'],
-            'improved_block_qrcs': cached_data['improved_block_qrcs_values'],
-            'stratified_direct': cached_data.get('stratified_direct_values', {}),
-            'stratified_cs': cached_data.get('stratified_cs_values', {}),
-            'leverage_shap': cached_data.get('leverage_shap_values', {}),
-            'multilinear_naive': cached_data.get('multilinear_naive_values', {}),
-            'multilinear_shapley_weighted': cached_data.get('multilinear_shapley_weighted_values', {}),
-            'multilinear_inverse_coalition': cached_data.get('multilinear_inverse_coalition_values', {}),
-            'multilinear_bernoulli': cached_data.get('multilinear_bernoulli_values', {}),
+            "shapley": cached_data["shapley_values"],
+            "cis": cached_data["cis_values"],
+            "random_cs": cached_data["random_cs_values"],
+            "qrcs": cached_data["qrcs_values"],
+            "block_qrcs": cached_data["block_qrcs_values"],
+            "improved_qrcs": cached_data["improved_qrcs_values"],
+            "improved_block_qrcs": cached_data["improved_block_qrcs_values"],
+            "stratified_direct": cached_data.get("stratified_direct_values", {}),
+            "stratified_cs": cached_data.get("stratified_cs_values", {}),
+            "leverage_shap": cached_data.get("leverage_shap_values", {}),
+            "multilinear_naive": cached_data.get("multilinear_naive_values", {}),
+            "multilinear_shapley_weighted": cached_data.get(
+                "multilinear_shapley_weighted_values", {}
+            ),
+            "multilinear_inverse_coalition": cached_data.get(
+                "multilinear_inverse_coalition_values", {}
+            ),
+            "multilinear_bernoulli": cached_data.get(
+                "multilinear_bernoulli_values", {}
+            ),
         }
-        time_results = cached_data['time_results']
-        improved_shapley_values = cached_data.get('improved_shapley_values', {})
-        cached_kpi_results = cached_data.get('kpi_results', None)
+        time_results = cached_data["time_results"]
+        improved_shapley_values = cached_data.get("improved_shapley_values", {})
+        cached_kpi_results = cached_data.get("kpi_results", None)
     else:
         # Train model ONCE (outside characteristic function)
         print("\n" + "=" * 60)
@@ -1389,7 +1500,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
         print("STEP 2: Build graph")
         print("=" * 60)
         builder = GraphBuilder()
-        G = builder.from_kendalltau_minimal_edge(X, reverse=True, version='v3')
+        G = builder.from_kendalltau_minimal_edge(X, reverse=True, version="v3")
         print(f"Using original graph construction (kendalltau + minimal edge graph)")
         print(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
 
@@ -1399,13 +1510,13 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
         print("=" * 60)
         custom_char_func = _create_characteristic_function(
             model=trained_model,  # Pre-trained model
-            X_train=X_train,      # For baseline statistics
+            X_train=X_train,  # For baseline statistics
             X_test=X_test,
             y_test=y_test,
             X_full=X,
             y_full=y,
             use_masking=no_retrain,
-            imputation_strategy=imputation_strategy
+            imputation_strategy=imputation_strategy,
         )
 
         # Compute all explainers
@@ -1435,7 +1546,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
             X_full=X,
             y_full=y,
             use_masking=no_retrain,
-            imputation_strategy=imputation_strategy
+            imputation_strategy=imputation_strategy,
         )
         improved_shapley_values = _test_improved_graphs(
             X, y, custom_char_func, feature_rankings, time_results
@@ -1445,8 +1556,12 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
     print("\n" + "=" * 60)
     print("Exporting results...")
     print("=" * 60)
-    _export_feature_rankings_csv(feature_rankings, dataset, imputation_strategy, no_retrain, retrain_kpi)
-    _export_time_comparison_csv(time_results, dataset, imputation_strategy, no_retrain, retrain_kpi)
+    _export_feature_rankings_csv(
+        feature_rankings, dataset, imputation_strategy, no_retrain, retrain_kpi
+    )
+    _export_time_comparison_csv(
+        time_results, dataset, imputation_strategy, no_retrain, retrain_kpi
+    )
 
     # Print feature ranking table
     _print_feature_ranking_table(feature_rankings, limit=limit)
@@ -1459,34 +1574,47 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
     print("Generating KPI comparison plot...")
     print("=" * 60)
     kpi_results, kpi_saved_files = plot_KPI_comparison_by_dict(
-        reader, feature_rankings, model, dataset, limit, cached_kpi_results,
-        retrain_kpi=retrain_kpi, imputation_strategy=imputation_strategy, no_retrain=no_retrain
+        reader,
+        feature_rankings,
+        model,
+        dataset,
+        limit,
+        cached_kpi_results,
+        retrain_kpi=retrain_kpi,
+        imputation_strategy=imputation_strategy,
+        no_retrain=no_retrain,
     )
 
     # Export KPI metrics to CSV
-    _export_kpi_metrics_csv(kpi_results, dataset, imputation_strategy, no_retrain, retrain_kpi)
+    _export_kpi_metrics_csv(
+        kpi_results, dataset, imputation_strategy, no_retrain, retrain_kpi
+    )
 
     # Save cache if needed
     if use_cache and not cached_data:
         _save_cache(
             cache_file,
-            shapley_values=all_values['shapley'],
-            cis_values=all_values['cis'],
-            random_cs_values=all_values['random_cs'],
-            qrcs_values=all_values['qrcs'],
-            block_qrcs_values=all_values['block_qrcs'],
-            improved_qrcs_values=all_values['improved_qrcs'],
-            improved_block_qrcs_values=all_values['improved_block_qrcs'],
-            stratified_direct_values=all_values['stratified_direct'],
-            stratified_cs_values=all_values['stratified_cs'],
-            leverage_shap_values=all_values['leverage_shap'],
-            multilinear_naive_values=all_values['multilinear_naive'],
-            multilinear_shapley_weighted_values=all_values['multilinear_shapley_weighted'],
-            multilinear_inverse_coalition_values=all_values['multilinear_inverse_coalition'],
-            multilinear_bernoulli_values=all_values['multilinear_bernoulli'],
+            shapley_values=all_values["shapley"],
+            cis_values=all_values["cis"],
+            random_cs_values=all_values["random_cs"],
+            qrcs_values=all_values["qrcs"],
+            block_qrcs_values=all_values["block_qrcs"],
+            improved_qrcs_values=all_values["improved_qrcs"],
+            improved_block_qrcs_values=all_values["improved_block_qrcs"],
+            stratified_direct_values=all_values["stratified_direct"],
+            stratified_cs_values=all_values["stratified_cs"],
+            leverage_shap_values=all_values["leverage_shap"],
+            multilinear_naive_values=all_values["multilinear_naive"],
+            multilinear_shapley_weighted_values=all_values[
+                "multilinear_shapley_weighted"
+            ],
+            multilinear_inverse_coalition_values=all_values[
+                "multilinear_inverse_coalition"
+            ],
+            multilinear_bernoulli_values=all_values["multilinear_bernoulli"],
             improved_shapley_values=improved_shapley_values,
             time_results=time_results,
-            kpi_results=kpi_results
+            kpi_results=kpi_results,
         )
 
     # Print time summary
@@ -1498,23 +1626,23 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
 
     # Return all results
     return (
-        all_values['shapley'],
-        all_values['cis'],
-        all_values['random_cs'],
-        all_values['qrcs'],
-        all_values['block_qrcs'],
-        all_values['improved_qrcs'],
-        all_values['improved_block_qrcs'],
-        all_values['stratified_direct'],
-        all_values['stratified_cs'],
-        all_values['leverage_shap'],
-        all_values['multilinear_naive'],
-        all_values['multilinear_shapley_weighted'],
-        all_values['multilinear_inverse_coalition'],
-        all_values['multilinear_bernoulli'],
+        all_values["shapley"],
+        all_values["cis"],
+        all_values["random_cs"],
+        all_values["qrcs"],
+        all_values["block_qrcs"],
+        all_values["improved_qrcs"],
+        all_values["improved_block_qrcs"],
+        all_values["stratified_direct"],
+        all_values["stratified_cs"],
+        all_values["leverage_shap"],
+        all_values["multilinear_naive"],
+        all_values["multilinear_shapley_weighted"],
+        all_values["multilinear_inverse_coalition"],
+        all_values["multilinear_bernoulli"],
         improved_shapley_values,
         time_results,
-        kpi_results
+        kpi_results,
     )
 
 
@@ -1525,7 +1653,7 @@ def benchmark_feature_importance(reader, model, dataset, limit=10,
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
-        description='Benchmark Shapley value computation methods with new modular API',
+        description="Benchmark Shapley value computation methods with new modular API",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1540,51 +1668,49 @@ Examples:
 
   # Disable improved graph testing
   python benchmark_qr_new_api.py --no-improved-graphs
-        """
+        """,
     )
     parser.add_argument(
-        '--retrain',
-        action='store_true',
-        help='Use retraining approach (slow, retrains model for each coalition). '
-             'Default is to use efficient masking (~100x faster).'
+        "--retrain",
+        action="store_true",
+        help="Use retraining approach (slow, retrains model for each coalition). "
+        "Default is to use efficient masking (~100x faster).",
     )
     parser.add_argument(
-        '--no-cache',
-        action='store_true',
-        help='Disable caching of results'
+        "--no-cache", action="store_true", help="Disable caching of results"
     )
     parser.add_argument(
-        '--no-improved-graphs',
-        action='store_true',
-        help='Skip improved graph construction tests'
+        "--no-improved-graphs",
+        action="store_true",
+        help="Skip improved graph construction tests",
     )
     parser.add_argument(
-        '--limit',
+        "--limit",
         type=int,
         default=10,
-        help='Number of top features to evaluate (default: 10)'
+        help="Number of top features to evaluate (default: 10)",
     )
     parser.add_argument(
-        '--dataset',
-        choices=['housing', 'h1n1'],
-        default='housing',
-        help='Dataset to use (default: housing)'
+        "--dataset",
+        choices=["housing", "h1n1"],
+        default="housing",
+        help="Dataset to use (default: housing)",
     )
     parser.add_argument(
-        '--retrain-kpi',
-        action='store_true',
-        help='Use retraining (not masking) for KPI plots. '
-             'Slower but measures true feature importance for model quality. '
-             'Default is to use masking (consistent with Shapley computation).'
+        "--retrain-kpi",
+        action="store_true",
+        help="Use retraining (not masking) for KPI plots. "
+        "Slower but measures true feature importance for model quality. "
+        "Default is to use masking (consistent with Shapley computation).",
     )
     parser.add_argument(
-        '--imputation',
-        choices=['mean', 'zero', 'permutation'],
-        default='mean',
-        help='Strategy for handling masked features. '
-             'mean: replace with training set mean (default). '
-             'zero: replace with 0. '
-             'permutation: randomly permute values.'
+        "--imputation",
+        choices=["mean", "zero", "permutation"],
+        default="mean",
+        help="Strategy for handling masked features. "
+        "mean: replace with training set mean (default). "
+        "zero: replace with 0. "
+        "permutation: randomly permute values.",
     )
 
     args = parser.parse_args()
@@ -1593,8 +1719,12 @@ Examples:
     print("BENCHMARK WITH NEW MODULAR API")
     print("=" * 60)
     print(f"\nConfiguration:")
-    print(f"  Shapley mode: {'Retraining (slow)' if args.retrain else 'Masking (fast, recommended)'}")
-    print(f"  KPI mode: {'Retraining' if args.retrain_kpi else 'Masking (consistent with Shapley)'}")
+    print(
+        f"  Shapley mode: {'Retraining (slow)' if args.retrain else 'Masking (fast, recommended)'}"
+    )
+    print(
+        f"  KPI mode: {'Retraining' if args.retrain_kpi else 'Masking (consistent with Shapley)'}"
+    )
     print(f"  Imputation strategy: {args.imputation}")
     print(f"  Cache: {'Disabled' if args.no_cache else 'Enabled'}")
     print(f"  Improved graphs: {'Disabled' if args.no_improved_graphs else 'Enabled'}")
@@ -1602,7 +1732,7 @@ Examples:
     print(f"  Top features: {args.limit}")
 
     # Select dataset reader and appropriate model
-    if args.dataset == 'housing':
+    if args.dataset == "housing":
         reader = housing_data_reader
         model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
         print(f"  Task type: Regression (using LGBMRegressor, metric: R²)")
@@ -1612,11 +1742,25 @@ Examples:
         print(f"  Task type: Classification (using LGBMClassifier, metric: Accuracy)")
 
     print("\nRunning benchmark...")
-    (shapley_values, cis_values, random_cs_values, qrcs_values,
-     block_qrcs_values, improved_qrcs_values, improved_block_qrcs_values,
-     stratified_direct_values, stratified_cs_values, leverage_shap_values,
-     multilinear_naive_values, multilinear_sw_values, multilinear_ic_values,
-     multilinear_bern_values, improved_shapley_values, time_results, results) = benchmark_feature_importance(
+    (
+        shapley_values,
+        cis_values,
+        random_cs_values,
+        qrcs_values,
+        block_qrcs_values,
+        improved_qrcs_values,
+        improved_block_qrcs_values,
+        stratified_direct_values,
+        stratified_cs_values,
+        leverage_shap_values,
+        multilinear_naive_values,
+        multilinear_sw_values,
+        multilinear_ic_values,
+        multilinear_bern_values,
+        improved_shapley_values,
+        time_results,
+        results,
+    ) = benchmark_feature_importance(
         reader,
         model,
         dataset=args.dataset,
@@ -1625,7 +1769,7 @@ Examples:
         use_cache=not args.no_cache,
         no_retrain=not args.retrain,  # Default is True (use masking)
         retrain_kpi=args.retrain_kpi,
-        imputation_strategy=args.imputation
+        imputation_strategy=args.imputation,
     )
 
     print("\n" + "=" * 60)
@@ -1663,7 +1807,9 @@ Examples:
     print("=" * 60)
     if not args.retrain:
         print("\n✓ Used efficient masking approach (~100x faster than retraining)")
-        print("  To compare with retraining, run: python benchmark_qr_new_api.py --retrain")
+        print(
+            "  To compare with retraining, run: python benchmark_qr_new_api.py --retrain"
+        )
     else:
         print("\n⚠ Used retraining approach (slow)")
         print("  For faster execution, run: python benchmark_qr_new_api.py (default)")

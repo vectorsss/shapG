@@ -7,22 +7,22 @@ from .characteristic_functions import (
     NodeCount,
     WeightedSum,
     CustomFunction,
-    CenterOfImputationSet
+    CenterOfImputationSet,
 )
 
 from .model_based import (
     ModelBasedCharacteristic,
     GraphModelCharacteristic,
-    EnsembleMaskingCharacteristic
+    EnsembleMaskingCharacteristic,
 )
 
 __all__ = [
-    'CoalitionDegree',
-    'NodeCount',
-    'WeightedSum',
-    'CustomFunction',
-    'CenterOfImputationSet',
-    'ModelBasedCharacteristic',
-    'GraphModelCharacteristic',
-    'EnsembleMaskingCharacteristic'
+    "CoalitionDegree",
+    "NodeCount",
+    "WeightedSum",
+    "CustomFunction",
+    "CenterOfImputationSet",
+    "ModelBasedCharacteristic",
+    "GraphModelCharacteristic",
+    "EnsembleMaskingCharacteristic",
 ]

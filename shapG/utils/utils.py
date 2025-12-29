@@ -15,7 +15,10 @@ class MatrixDataFrame(pd.DataFrame):
             return self.iloc[key[0], key[1]]
         return super().__getitem__(key)
 
-def corr_generator(df: Union[pd.DataFrame, np.ndarray], method: Union[Callable, str] = kendalltau) -> pd.DataFrame:
+
+def corr_generator(
+    df: Union[pd.DataFrame, np.ndarray], method: Union[Callable, str] = kendalltau
+) -> pd.DataFrame:
     """Generate a correlation matrix of a dataframe using the specified method.
 
     Args:
@@ -32,42 +35,41 @@ def corr_generator(df: Union[pd.DataFrame, np.ndarray], method: Union[Callable, 
     """
     # Convert numpy array to DataFrame if needed
     if isinstance(df, np.ndarray):
-        df = pd.DataFrame(df, columns=[f'col_{i}' for i in range(df.shape[1])])
+        df = pd.DataFrame(df, columns=[f"col_{i}" for i in range(df.shape[1])])
 
     # Handle string method names
     if isinstance(method, str):
-        method_map = {
-            'pearson': pearsonr,
-            'kendall': kendalltau,
-            'spearman': spearmanr
-        }
+        method_map = {"pearson": pearsonr, "kendall": kendalltau, "spearman": spearmanr}
         if method not in method_map:
-            raise ValueError("method should be 'pearson', 'kendall', 'spearman', or the corresponding functions")
+            raise ValueError(
+                "method should be 'pearson', 'kendall', 'spearman', or the corresponding functions"
+            )
         method = method_map[method]
     elif method not in [pearsonr, kendalltau, spearmanr]:
         raise ValueError("method should be pearsonr, kendalltau, or spearmanr")
 
     # Create empty correlation matrix
     corr_df = pd.DataFrame(
-        np.zeros((df.shape[1], df.shape[1])),
-        columns=df.columns,
-        index=df.columns
+        np.zeros((df.shape[1], df.shape[1])), columns=df.columns, index=df.columns
     )
-    
+
     # Set diagonal to 1 (self-correlation)
     np.fill_diagonal(corr_df.values, 1.0)
 
     # Calculate correlations for all column pairs
     for i, col1 in enumerate(df.columns):
         # Only need to calculate upper triangle due to symmetry
-        for col2 in df.columns[i+1:]:
+        for col2 in df.columns[i + 1 :]:
             corr, _ = method(df[col1], df[col2])
             corr_df.loc[col1, col2] = corr
             corr_df.loc[col2, col1] = corr  # Symmetry
 
     return corr_df
 
-def matrix_generator(df: pd.DataFrame, method: Union[Callable, str] = kendalltau) -> MatrixDataFrame:
+
+def matrix_generator(
+    df: pd.DataFrame, method: Union[Callable, str] = kendalltau
+) -> MatrixDataFrame:
     """Generate a similarity/distance matrix for a dataframe using the specified method.
 
     Args:
@@ -83,11 +85,11 @@ def matrix_generator(df: pd.DataFrame, method: Union[Callable, str] = kendalltau
     # Handle string method names
     if isinstance(method, str):
         method_map = {
-            'pearson': pearsonr,
-            'kendall': kendalltau,
-            'spearman': spearmanr,
-            'mutual_info_score': mutual_info_score,
-            'mutual_info_regression': mutual_info_regression
+            "pearson": pearsonr,
+            "kendall": kendalltau,
+            "spearman": spearmanr,
+            "mutual_info_score": mutual_info_score,
+            "mutual_info_regression": mutual_info_regression,
         }
         if method not in method_map:
             raise ValueError(f"Unknown method string: {method}")
@@ -95,52 +97,50 @@ def matrix_generator(df: pd.DataFrame, method: Union[Callable, str] = kendalltau
     # Handle standard correlation methods
     if method in [pearsonr, kendalltau, spearmanr]:
         corr_df = corr_generator(df, method)
-        return MatrixDataFrame(corr_df.values, index=corr_df.index, columns=corr_df.columns)
-    
+        return MatrixDataFrame(
+            corr_df.values, index=corr_df.index, columns=corr_df.columns
+        )
+
     # Handle mutual information for categorical variables
     elif method == mutual_info_score:
         # Check if columns appear to be categorical
         if df.apply(lambda x: len(x.unique())).max() > 10:
-            raise ValueError("mutual_info_score is best suited for categorical data (columns with ≤10 unique values)")
-        
+            raise ValueError(
+                "mutual_info_score is best suited for categorical data (columns with ≤10 unique values)"
+            )
+
         # Initialize matrix
         matrix_df = MatrixDataFrame(
-            np.zeros((df.shape[1], df.shape[1])),
-            columns=df.columns,
-            index=df.columns
+            np.zeros((df.shape[1], df.shape[1])), columns=df.columns, index=df.columns
         )
-        
+
         # Calculate mutual information for all column pairs
         for i, col1 in enumerate(df.columns):
-            for col2 in df.columns[i+1:]:
+            for col2 in df.columns[i + 1 :]:
                 mi = method(df[col1], df[col2])
                 matrix_df.loc[col1, col2] = mi
                 matrix_df.loc[col2, col1] = mi  # Symmetry
-    
+
     # Handle mutual information regression
     elif method == mutual_info_regression:
         matrix_df = MatrixDataFrame(
-            np.zeros((df.shape[1], df.shape[1])),
-            columns=df.columns,
-            index=df.columns
+            np.zeros((df.shape[1], df.shape[1])), columns=df.columns, index=df.columns
         )
-        
+
         for col1 in matrix_df.columns:
             for col2 in matrix_df.columns:
                 if col1 != col2:
                     measures = method(df[[col1]], df[col2])
                     matrix_df.loc[col1, col2] = measures[0]
-    
+
     # Handle other methods (including kl divergence)
     else:
         matrix_df = MatrixDataFrame(
-            np.zeros((df.shape[1], df.shape[1])),
-            columns=df.columns,
-            index=df.columns
+            np.zeros((df.shape[1], df.shape[1])), columns=df.columns, index=df.columns
         )
-        
+
         for i, col1 in enumerate(df.columns):
-            for col2 in df.columns[i+1:]:
+            for col2 in df.columns[i + 1 :]:
                 if col1 != col2:
                     measure = method(df[col1], df[col2])
                     matrix_df.loc[col1, col2] = measure
@@ -150,32 +150,34 @@ def matrix_generator(df: pd.DataFrame, method: Union[Callable, str] = kendalltau
                     else:
                         # For KL, calculate the reverse direction separately
                         matrix_df.loc[col2, col1] = method(df[col2], df[col1])
-    
+
     return matrix_df
+
 
 def kl(P: np.ndarray, Q: np.ndarray) -> float:
     """Calculate Kullback-Leibler divergence between two distributions.
-    
+
     Args:
         P (np.ndarray): First distribution.
         Q (np.ndarray): Second distribution.
-        
+
     Returns:
         float: KL divergence from Q to P.
     """
     epsilon = 1e-10
-    
+
     # Add epsilon to avoid log(0) and ensure proper normalization
     P = P + epsilon
     Q = Q + epsilon
-    
+
     # Normalize to probability distributions
     P = P / np.sum(P)
     Q = Q / np.sum(Q)
-    
+
     # Calculate KL divergence: sum(P(i) * log(P(i)/Q(i)))
     divergence = np.sum(P * np.log(P / Q))
     return divergence
+
 
 def kl_mi_matrix(data: Union[pd.DataFrame, np.ndarray], bins: int = 10) -> pd.DataFrame:
     """Create a matrix of mutual information between features.
@@ -192,14 +194,14 @@ def kl_mi_matrix(data: Union[pd.DataFrame, np.ndarray], bins: int = 10) -> pd.Da
     """
     # Convert to DataFrame if needed
     if isinstance(data, np.ndarray):
-        data = pd.DataFrame(data, columns=[f'feature_{i}' for i in range(data.shape[1])])
+        data = pd.DataFrame(
+            data, columns=[f"feature_{i}" for i in range(data.shape[1])]
+        )
 
     # Initialize matrix
     n_features = data.shape[1]
     mi_matrix = MatrixDataFrame(
-        np.zeros((n_features, n_features)),
-        index=data.columns,
-        columns=data.columns
+        np.zeros((n_features, n_features)), index=data.columns, columns=data.columns
     )
 
     # Fill diagonal with 1s (self-information)
@@ -212,7 +214,9 @@ def kl_mi_matrix(data: Union[pd.DataFrame, np.ndarray], bins: int = 10) -> pd.Da
     for i in range(n_features):
         for j in range(i + 1, n_features):
             # Discretize features for mutual information calculation
-            discretizer = KBinsDiscretizer(n_bins=bins, encode='ordinal', strategy='uniform')
+            discretizer = KBinsDiscretizer(
+                n_bins=bins, encode="ordinal", strategy="uniform"
+            )
             col_i_discrete = discretizer.fit_transform(data.iloc[:, [i]]).ravel()
             col_j_discrete = discretizer.fit_transform(data.iloc[:, [j]]).ravel()
 
@@ -223,14 +227,15 @@ def kl_mi_matrix(data: Union[pd.DataFrame, np.ndarray], bins: int = 10) -> pd.Da
 
     return mi_matrix
 
+
 def create_minimal_edge_graph(
     W: Union[pd.DataFrame, np.ndarray],
-    version: str = 'v3',
+    version: str = "v3",
     reverse: bool = True,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> tuple[Union[pd.DataFrame, np.ndarray], Union[pd.DataFrame, np.ndarray]]:
     """Convert a weight matrix to a minimal adjacency matrix that preserves connectivity.
-    
+
     Args:
         W (pd.DataFrame): Weight matrix.
         version (str, optional): Algorithm version.
@@ -239,7 +244,7 @@ def create_minimal_edge_graph(
             - 'v3': Ensure strong connectivity. Defaults to 'v3'.
         reverse (bool, optional): Sort order (True=descending, False=ascending). Defaults to True.
         verbose (bool, optional): Whether to print debug information. Defaults to False.
-        
+
     Returns:
         tuple: (adjacency_matrix, reduced_weight_matrix)
     """
@@ -248,11 +253,14 @@ def create_minimal_edge_graph(
 
     # Convert numpy array to DataFrame for internal processing
     if input_was_numpy:
-        W = pd.DataFrame(W, columns=[f'col_{i}' for i in range(W.shape[1])],
-                                  index=[f'col_{i}' for i in range(W.shape[0])])
+        W = pd.DataFrame(
+            W,
+            columns=[f"col_{i}" for i in range(W.shape[1])],
+            index=[f"col_{i}" for i in range(W.shape[0])],
+        )
 
     columns = W.columns.tolist()
-    
+
     # Create list of all edges with weights
     edges = []
     for i in range(len(columns)):
@@ -266,18 +274,18 @@ def create_minimal_edge_graph(
     connected_nodes = set()
     adjacency_matrix = pd.DataFrame(0, index=columns, columns=columns, dtype=np.int8)
     reduced_df = pd.DataFrame(0, index=columns, columns=columns, dtype=np.float64)
-    
+
     # Helper function to check if graph is connected
     def is_graph_connected():
         G = nx.Graph(adjacency_matrix)
         return nx.is_connected(G)
-    
+
     # Add edges according to selected algorithm version
     for edge in edges:
         node1, node2, weight = edge
         add_edge = False
-        
-        if version == 'v1':
+
+        if version == "v1":
             # V1: Add edge if either node is not yet in the graph
             if node1 not in connected_nodes or node2 not in connected_nodes:
                 add_edge = True
@@ -287,11 +295,13 @@ def create_minimal_edge_graph(
                         print(f"v1 terminating at weight: {weight}")
                     add_edge = True
                     # Final edge to add
-                    adjacency_matrix.loc[node1, node2] = adjacency_matrix.loc[node2, node1] = 1
+                    adjacency_matrix.loc[node1, node2] = adjacency_matrix.loc[
+                        node2, node1
+                    ] = 1
                     reduced_df.loc[node1, node2] = reduced_df.loc[node2, node1] = weight
                     break
-        
-        elif version == 'v2':
+
+        elif version == "v2":
             # V2: Add edge if either node is not yet in the graph
             if node1 not in connected_nodes or node2 not in connected_nodes:
                 add_edge = True
@@ -303,8 +313,8 @@ def create_minimal_edge_graph(
                 if verbose:
                     print(f"v2 terminating at weight: {weight}")
                 break
-        
-        elif version == 'v3':
+
+        elif version == "v3":
             # V3: Add all edges until the graph is connected with all nodes
             if not (len(connected_nodes) == len(columns) and is_graph_connected()):
                 add_edge = True
@@ -312,7 +322,7 @@ def create_minimal_edge_graph(
                 if verbose:
                     print(f"v3 terminating at weight: {weight}")
                 break
-        
+
         # Add the edge if needed
         if add_edge:
             adjacency_matrix.loc[node1, node2] = adjacency_matrix.loc[node2, node1] = 1

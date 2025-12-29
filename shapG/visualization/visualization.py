@@ -14,7 +14,7 @@ from matplotlib.axes import Axes
 class FeatureImportanceVisualizer:
     """Visualizer for feature importance scores."""
 
-    def __init__(self, style: str = 'seaborn-v0_8', figsize: Tuple[int, int] = (10, 6)):
+    def __init__(self, style: str = "seaborn-v0_8", figsize: Tuple[int, int] = (10, 6)):
         """Initialize visualizer.
 
         Args:
@@ -32,16 +32,16 @@ class FeatureImportanceVisualizer:
         feature_names: Optional[List[str]] = None,
         top_n: Optional[int] = None,
         figsize: Optional[Tuple[int, int]] = None,
-        color: str = '#1f77b4',
-        title: str = 'Feature Importance',
-        xlabel: str = 'Importance Score',
-        ylabel: str = 'Features',
+        color: str = "#1f77b4",
+        title: str = "Feature Importance",
+        xlabel: str = "Importance Score",
+        ylabel: str = "Features",
         show_values: bool = True,
-        value_format: str = '{:.3f}',
+        value_format: str = "{:.3f}",
         sort: bool = True,
         ax: Optional[Axes] = None,
         show_plot: bool = True,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
     ) -> Tuple[Figure, Axes]:
         """Plot feature importance as horizontal bar chart.
 
@@ -65,23 +65,23 @@ class FeatureImportanceVisualizer:
         # Convert to DataFrame for easier handling
         if isinstance(importance_scores, dict):
             df = pd.DataFrame.from_dict(
-                importance_scores,
-                orient='index',
-                columns=['importance']
+                importance_scores, orient="index", columns=["importance"]
             )
         else:
-            df = pd.DataFrame(importance_scores, columns=['importance'])
+            df = pd.DataFrame(importance_scores, columns=["importance"])
 
         # Add feature names
         if feature_names:
-            df['feature'] = [feature_names[i] if i < len(feature_names) else f'Feature {i}'
-                            for i in df.index]
+            df["feature"] = [
+                feature_names[i] if i < len(feature_names) else f"Feature {i}"
+                for i in df.index
+            ]
         else:
-            df['feature'] = [f'Feature {i}' for i in df.index]
+            df["feature"] = [f"Feature {i}" for i in df.index]
 
         # Sort by importance
         if sort:
-            df = df.sort_values('importance', ascending=True)
+            df = df.sort_values("importance", ascending=True)
 
         # Select top N
         if top_n and len(df) > top_n:
@@ -95,15 +95,21 @@ class FeatureImportanceVisualizer:
             fig = ax.figure
 
         # Create horizontal bar plot
-        bars = ax.barh(df['feature'], df['importance'], color=color)
+        bars = ax.barh(df["feature"], df["importance"], color=color)
 
         # Add value labels
         if show_values:
             for bar in bars:
                 width = bar.get_width()
                 label = value_format.format(width)
-                ax.text(width, bar.get_y() + bar.get_height()/2,
-                       label, ha='left', va='center', fontsize=9)
+                ax.text(
+                    width,
+                    bar.get_y() + bar.get_height() / 2,
+                    label,
+                    ha="left",
+                    va="center",
+                    fontsize=9,
+                )
 
         # Labels and title
         ax.set_xlabel(xlabel)
@@ -111,13 +117,13 @@ class FeatureImportanceVisualizer:
         ax.set_title(title)
 
         # Grid
-        ax.grid(axis='x', alpha=0.3)
+        ax.grid(axis="x", alpha=0.3)
 
         plt.tight_layout()
 
         # Handle file saving and showing
         if filename:
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
         if show_plot:
             plt.show()
 
@@ -129,10 +135,10 @@ class FeatureImportanceVisualizer:
         feature_names: Optional[List[str]] = None,
         top_n: Optional[int] = 10,
         figsize: Optional[Tuple[int, int]] = None,
-        title: str = 'Feature Importance Comparison',
+        title: str = "Feature Importance Comparison",
         colors: Optional[List[str]] = None,
         show_plot: bool = True,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
     ) -> Tuple[Figure, Axes]:
         """Plot comparison of multiple importance scores.
 
@@ -153,7 +159,7 @@ class FeatureImportanceVisualizer:
 
         for method, scores in importance_dict.items():
             if isinstance(scores, dict):
-                df = pd.DataFrame.from_dict(scores, orient='index', columns=[method])
+                df = pd.DataFrame.from_dict(scores, orient="index", columns=[method])
             else:
                 df = pd.DataFrame(scores, columns=[method])
             dfs[method] = df
@@ -185,14 +191,16 @@ class FeatureImportanceVisualizer:
                     # If it's already a string (feature name), use it directly
                     feature_labels.append(idx)
                 else:
-                    feature_labels.append(f'Feature {idx}')
-            combined['feature'] = feature_labels
+                    feature_labels.append(f"Feature {idx}")
+            combined["feature"] = feature_labels
         else:
-            combined['feature'] = [str(i) for i in combined.index]
+            combined["feature"] = [str(i) for i in combined.index]
 
         # Get top features by mean importance
-        combined['mean_importance'] = combined[list(importance_dict.keys())].mean(axis=1)
-        combined = combined.nlargest(top_n, 'mean_importance')
+        combined["mean_importance"] = combined[list(importance_dict.keys())].mean(
+            axis=1
+        )
+        combined = combined.nlargest(top_n, "mean_importance")
 
         # Create plot
         actual_figsize = figsize if figsize is not None else (12, 8)
@@ -211,22 +219,21 @@ class FeatureImportanceVisualizer:
         # Plot bars for each method
         for i, method in enumerate(importance_dict.keys()):
             pos = positions + i * bar_width
-            ax.barh(pos, combined[method], bar_width,
-                   label=method, color=colors[i])
+            ax.barh(pos, combined[method], bar_width, label=method, color=colors[i])
 
         # Customize plot
         ax.set_yticks(positions + bar_width * (n_methods - 1) / 2)
-        ax.set_yticklabels(combined['feature'])
-        ax.set_xlabel('Importance Score')
+        ax.set_yticklabels(combined["feature"])
+        ax.set_xlabel("Importance Score")
         ax.set_title(title)
         ax.legend()
-        ax.grid(axis='x', alpha=0.3)
+        ax.grid(axis="x", alpha=0.3)
 
         plt.tight_layout()
 
         # Handle file saving and showing
         if filename:
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
         if show_plot:
             plt.show()
 
@@ -240,12 +247,12 @@ class FeatureImportanceVisualizer:
         row_labels: Optional[List[str]] = None,
         col_labels: Optional[List[str]] = None,
         figsize: Optional[Tuple[int, int]] = None,
-        cmap: str = 'RdBu_r',
-        title: str = 'Feature Importance Heatmap',
+        cmap: str = "RdBu_r",
+        title: str = "Feature Importance Heatmap",
         show_values: bool = False,
-        value_format: str = '{:.2f}',
+        value_format: str = "{:.2f}",
         show_plot: bool = True,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
     ) -> Tuple[Figure, Axes]:
         """Plot importance scores as heatmap.
 
@@ -282,12 +289,12 @@ class FeatureImportanceVisualizer:
             feature_names = col_labels
 
         # Create heatmap
-        im = ax.imshow(data, cmap=cmap, aspect='auto')
+        im = ax.imshow(data, cmap=cmap, aspect="auto")
 
         # Set ticks
         if feature_names:
             ax.set_xticks(np.arange(len(feature_names)))
-            ax.set_xticklabels(feature_names, rotation=45, ha='right')
+            ax.set_xticklabels(feature_names, rotation=45, ha="right")
         if sample_names:
             ax.set_yticks(np.arange(len(sample_names)))
             ax.set_yticklabels(sample_names)
@@ -296,22 +303,29 @@ class FeatureImportanceVisualizer:
         if show_values:
             for i in range(data.shape[0]):
                 for j in range(data.shape[1]):
-                    text = ax.text(j, i, value_format.format(data[i, j]),
-                                 ha='center', va='center', color='black', fontsize=8)
+                    text = ax.text(
+                        j,
+                        i,
+                        value_format.format(data[i, j]),
+                        ha="center",
+                        va="center",
+                        color="black",
+                        fontsize=8,
+                    )
 
         # Colorbar
         plt.colorbar(im, ax=ax)
 
         # Labels
-        ax.set_xlabel('Features')
-        ax.set_ylabel('Samples')
+        ax.set_xlabel("Features")
+        ax.set_ylabel("Samples")
         ax.set_title(title)
 
         plt.tight_layout()
 
         # Handle file saving and showing
         if filename:
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
         if show_plot:
             plt.show()
 
@@ -325,11 +339,11 @@ class FeatureImportanceVisualizer:
         figsize: Optional[Tuple[int, int]] = None,
         node_size_factor: float = 1000,
         edge_width_factor: float = 2,
-        cmap: str = 'coolwarm',
-        title: str = 'Feature Importance Network',
-        layout: str = 'spring',
+        cmap: str = "coolwarm",
+        title: str = "Feature Importance Network",
+        layout: str = "spring",
         show_plot: bool = True,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
     ) -> Tuple[Figure, Axes]:
         """Plot importance scores on network graph.
 
@@ -357,54 +371,59 @@ class FeatureImportanceVisualizer:
         fig, ax = plt.subplots(figsize=actual_figsize)
 
         # Get layout
-        if layout == 'spring':
+        if layout == "spring":
             pos = nx.spring_layout(graph)
-        elif layout == 'circular':
+        elif layout == "circular":
             pos = nx.circular_layout(graph)
-        elif layout == 'kamada_kawai':
+        elif layout == "kamada_kawai":
             pos = nx.kamada_kawai_layout(graph)
         else:
             pos = nx.spring_layout(graph)
 
         # Node sizes and colors based on importance
-        node_sizes = [abs(scores.get(node, 0)) * node_size_factor
-                     for node in graph.nodes()]
-        node_colors = [scores.get(node, 0)
-                      for node in graph.nodes()]
+        node_sizes = [
+            abs(scores.get(node, 0)) * node_size_factor for node in graph.nodes()
+        ]
+        node_colors = [scores.get(node, 0) for node in graph.nodes()]
 
         # Edge widths based on weights
         edge_widths = []
         for u, v in graph.edges():
-            weight = graph[u][v].get('weight', 1)
+            weight = graph[u][v].get("weight", 1)
             edge_widths.append(weight * edge_width_factor)
 
         # Draw network
         score_values = list(scores.values()) if scores else [0]
         vmin, vmax = min(score_values), max(score_values)
 
-        nx.draw_networkx_nodes(graph, pos, node_size=node_sizes,
-                              node_color=node_colors, cmap=cmap,
-                              vmin=vmin, vmax=vmax, ax=ax)
+        nx.draw_networkx_nodes(
+            graph,
+            pos,
+            node_size=node_sizes,
+            node_color=node_colors,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            ax=ax,
+        )
 
-        nx.draw_networkx_edges(graph, pos, width=edge_widths,
-                              alpha=0.3, ax=ax)
+        nx.draw_networkx_edges(graph, pos, width=edge_widths, alpha=0.3, ax=ax)
 
         nx.draw_networkx_labels(graph, pos, font_size=8, ax=ax)
 
         # Colorbar
-        sm = plt.cm.ScalarMappable(cmap=cmap,
-                                   norm=plt.Normalize(vmin=vmin, vmax=vmax))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
         sm.set_array([])
-        plt.colorbar(sm, ax=ax, label='Importance Score')
+        plt.colorbar(sm, ax=ax, label="Importance Score")
 
         ax.set_title(title)
-        ax.axis('off')
+        ax.axis("off")
 
         plt.tight_layout()
 
         # Handle file saving and showing
         if filename:
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
         if show_plot:
             plt.show()
 
@@ -416,17 +435,17 @@ def plot_shapley_values(
     shapley_values: Union[Dict[int, float], pd.Series],
     feature_names: Optional[List[str]] = None,
     top_n: int = 10,
-    style: str = 'seaborn-v0_8',
+    style: str = "seaborn-v0_8",
     figsize: Tuple[int, int] = (10, 6),
-    color: str = '#1f77b4',
+    color: str = "#1f77b4",
     show_values: bool = True,
     show_plot: bool = True,
-    title: str = 'Shapley Values',
+    title: str = "Shapley Values",
     graph: Optional[Any] = None,
-    layout: str = 'spring',
+    layout: str = "spring",
     node_size: int = 300,
     font_size: int = 10,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> Optional[Tuple[Figure, Axes]]:
     """Plot Shapley values (backward compatibility function).
 
@@ -453,7 +472,7 @@ def plot_shapley_values(
             layout=layout,
             node_size_factor=node_size,
             show_plot=show_plot,
-            filename=filename
+            filename=filename,
         )
     else:
         # Use bar chart
@@ -465,10 +484,10 @@ def plot_shapley_values(
             figsize=figsize,
             color=color,
             title=title,
-            xlabel='Shapley Value',
+            xlabel="Shapley Value",
             show_values=show_values,
             show_plot=show_plot,
-            filename=filename
+            filename=filename,
         )
 
     return (fig, ax)

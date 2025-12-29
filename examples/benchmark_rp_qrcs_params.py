@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Add parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname('.'), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname("."), "..")))
 
 from shapG import GraphBuilder
 from shapG.explainer import StratifiedShapleyExplainer, ExactExplainer
@@ -38,6 +38,7 @@ from shapG.characteristic import GraphModelCharacteristic
 # Optional plotting style (consistent with benchmark_qr_new_api.py)
 try:
     import gnuplot_style as gp
+
     gp.use("all")
 except ImportError:
     print("gnuplot_style not found, using default style")
@@ -51,7 +52,7 @@ CACHE_ENABLED = True
 
 # Configurations to test
 # ALLOCATION_STRATEGIES = ['leverage_bernoulli']
-ALLOCATION_STRATEGIES = ['shapley_weighted', 'leverage', 'leverage_bernoulli']
+ALLOCATION_STRATEGIES = ["shapley_weighted", "leverage", "leverage_bernoulli"]
 # USE_DIRECT_ESTIMATIONS = [False]
 USE_DIRECT_ESTIMATIONS = [True, False]
 N_SAMPLES_OPTIONS = [50]
@@ -67,19 +68,20 @@ WEIGHTED_SLOPE_BETA = 0.8
 # DATA READERS
 # ==============================================================================
 
-def housing_data_reader(filename='./data/housing_price.csv'):
+
+def housing_data_reader(filename="./data/housing_price.csv"):
     """Load Boston housing dataset."""
     data = pd.read_csv(filename)
-    X = data.drop(['MEDV'], axis=1)
-    y = data['MEDV']
+    X = data.drop(["MEDV"], axis=1)
+    y = data["MEDV"]
     return X, y
 
 
-def h1n1_data_reader(filename='./data/process_data.csv'):
+def h1n1_data_reader(filename="./data/process_data.csv"):
     """Load H1N1 vaccine dataset."""
     data = pd.read_csv(filename)
-    X = data.drop(['h1n1_vaccine', 'respondent_id', 'seasonal_vaccine'], axis=1)
-    y = data['h1n1_vaccine']
+    X = data.drop(["h1n1_vaccine", "respondent_id", "seasonal_vaccine"], axis=1)
+    y = data["h1n1_vaccine"]
     return X, y
 
 
@@ -88,14 +90,8 @@ def h1n1_data_reader(filename='./data/process_data.csv'):
 # ==============================================================================
 
 # Model hyperparameters (for KPI computation)
-MODEL_RANDOM_STATES = {
-    lgb.LGBMClassifier: [10, 10],
-    lgb.LGBMRegressor: [42, 42]
-}
-MODEL_TEST_SIZES = {
-    lgb.LGBMClassifier: [0.2, 0.2],
-    lgb.LGBMRegressor: [0.2, 0.3]
-}
+MODEL_RANDOM_STATES = {lgb.LGBMClassifier: [10, 10], lgb.LGBMRegressor: [42, 42]}
+MODEL_TEST_SIZES = {lgb.LGBMClassifier: [0.2, 0.2], lgb.LGBMRegressor: [0.2, 0.3]}
 
 
 def _ensure_output_dir():
@@ -104,7 +100,7 @@ def _ensure_output_dir():
     return OUTPUT_DIR
 
 
-def _get_cache_filename(dataset, imputation_strategy='mean', retrain_kpi=False):
+def _get_cache_filename(dataset, imputation_strategy="mean", retrain_kpi=False):
     """
     Generate cache filename based on dataset name and configuration.
 
@@ -125,7 +121,7 @@ def _load_cache(cache_file):
     print(f"Loading cached results from {cache_file}...")
 
     try:
-        with open(cache_file, 'rb') as f:
+        with open(cache_file, "rb") as f:
             cached_data = pickle.load(f)
 
         print(f"Successfully loaded cached results!")
@@ -142,7 +138,7 @@ def _save_cache(cache_file, results):
     print(f"\nSaving results to cache: {cache_file}")
 
     try:
-        with open(cache_file, 'wb') as f:
+        with open(cache_file, "wb") as f:
             pickle.dump(results, f)
         print(f"Successfully saved cache!")
     except Exception as e:
@@ -187,7 +183,9 @@ def _train_model_once(X, y, model):
     return model, X_train, X_test, y_test
 
 
-def _create_characteristic_function(model, X_train, X_test, y_test, imputation_strategy='mean'):
+def _create_characteristic_function(
+    model, X_train, X_test, y_test, imputation_strategy="mean"
+):
     """Create characteristic function using masking approach."""
     is_classifier = isinstance(model, lgb.LGBMClassifier)
     metric_fn = accuracy_score if is_classifier else r2_score
@@ -203,7 +201,7 @@ def _create_characteristic_function(model, X_train, X_test, y_test, imputation_s
         masking_strategy=imputation_strategy,
         metric_fn=metric_fn,
         baseline=baseline,
-        name=f"{task_type} {metric_name} (Masking-{imputation_strategy})"
+        name=f"{task_type} {metric_name} (Masking-{imputation_strategy})",
     )
 
 
@@ -225,8 +223,7 @@ def _compute_exact_shapley(G, custom_char_func):
     start_time = time.time()
 
     exact_explainer = ExactExplainer(
-        characteristic_function=custom_char_func,
-        verbose=True
+        characteristic_function=custom_char_func, verbose=True
     )
     exact_values = exact_explainer.fit_explain(G)
     elapsed = time.time() - start_time
@@ -258,17 +255,24 @@ def _compute_error(values, exact_values):
 # BENCHMARK FUNCTIONS
 # ==============================================================================
 
+
 def _generate_config_name(config):
     """Generate readable name for configuration."""
-    strategy = config['allocation_strategy']
-    estimation = 'direct' if config['use_direct_estimation'] else 'cs'
-    n_samples = config['n_samples']
+    strategy = config["allocation_strategy"]
+    estimation = "direct" if config["use_direct_estimation"] else "cs"
+    n_samples = config["n_samples"]
     return f"{strategy}_{estimation}_{n_samples}s"
 
 
-def benchmark_stratified_configurations(reader, model, dataset, compute_exact=True,
-                                     imputation_strategy='mean', use_cache=True,
-                                     retrain_kpi=False):
+def benchmark_stratified_configurations(
+    reader,
+    model,
+    dataset,
+    compute_exact=True,
+    imputation_strategy="mean",
+    use_cache=True,
+    retrain_kpi=False,
+):
     """
     Benchmark different Stratified Shapley configurations.
 
@@ -306,7 +310,7 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
     print("STEP 2: Build graph")
     print("=" * 80)
     builder = GraphBuilder()
-    G = builder.from_kendalltau_minimal_edge(X, reverse=True, version='v3')
+    G = builder.from_kendalltau_minimal_edge(X, reverse=True, version="v3")
     print(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
 
     # Create characteristic function
@@ -318,7 +322,7 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
         X_train=X_train,
         X_test=X_test,
         y_test=y_test,
-        imputation_strategy=imputation_strategy
+        imputation_strategy=imputation_strategy,
     )
 
     # Compute exact Shapley values if requested
@@ -335,15 +339,13 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
 
     configs = []
     for strategy, direct, n_samples in product(
-        ALLOCATION_STRATEGIES,
-        USE_DIRECT_ESTIMATIONS,
-        N_SAMPLES_OPTIONS
+        ALLOCATION_STRATEGIES, USE_DIRECT_ESTIMATIONS, N_SAMPLES_OPTIONS
     ):
         config = {
-            'allocation_strategy': strategy,
-            'use_direct_estimation': direct,
-            'n_samples': n_samples,
-            'seed': SEED
+            "allocation_strategy": strategy,
+            "use_direct_estimation": direct,
+            "n_samples": n_samples,
+            "seed": SEED,
         }
         configs.append(config)
 
@@ -355,12 +357,12 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
     print("=" * 80)
 
     results = {
-        'configs': [],
-        'names': [],
-        'shapley_values': [],
-        'times': [],
-        'errors': [],
-        'sampling_stats': []
+        "configs": [],
+        "names": [],
+        "shapley_values": [],
+        "times": [],
+        "errors": [],
+        "sampling_stats": [],
     }
 
     for i, config in enumerate(configs, 1):
@@ -373,9 +375,7 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
 
         try:
             explainer = StratifiedShapleyExplainer(
-                characteristic_function=custom_char_func,
-                verbose=True,
-                **config
+                characteristic_function=custom_char_func, verbose=True, **config
             )
 
             values = explainer.fit_explain(G)
@@ -388,12 +388,12 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
             stats = explainer.get_sampling_stats()
 
             # Store results
-            results['configs'].append(config)
-            results['names'].append(config_name)
-            results['shapley_values'].append(values)
-            results['times'].append(elapsed)
-            results['errors'].append(error)
-            results['sampling_stats'].append(stats)
+            results["configs"].append(config)
+            results["names"].append(config_name)
+            results["shapley_values"].append(values)
+            results["times"].append(elapsed)
+            results["errors"].append(error)
+            results["sampling_stats"].append(stats)
 
             print(f"  Time: {elapsed:.2f}s")
             if error is not None:
@@ -401,18 +401,18 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
 
         except Exception as e:
             print(f"  ERROR: {e}")
-            results['configs'].append(config)
-            results['names'].append(config_name)
-            results['shapley_values'].append({})
-            results['times'].append(None)
-            results['errors'].append(None)
-            results['sampling_stats'].append(None)
+            results["configs"].append(config)
+            results["names"].append(config_name)
+            results["shapley_values"].append({})
+            results["times"].append(None)
+            results["errors"].append(None)
+            results["sampling_stats"].append(None)
 
     # Add exact values to results
-    results['exact_values'] = exact_values
-    results['dataset'] = dataset
-    results['n_features'] = X.shape[1]
-    results['feature_names'] = X.columns.tolist()
+    results["exact_values"] = exact_values
+    results["dataset"] = dataset
+    results["n_features"] = X.shape[1]
+    results["feature_names"] = X.columns.tolist()
 
     # Save cache
     if use_cache:
@@ -425,22 +425,24 @@ def benchmark_stratified_configurations(reader, model, dataset, compute_exact=Tr
 # VISUALIZATION AND EXPORT
 # ==============================================================================
 
+
 def export_results_csv(results, output_dir=None):
     """Export benchmark results to CSV."""
     if output_dir is None:
         output_dir = _ensure_output_dir()
 
-    dataset = results['dataset']
+    dataset = results["dataset"]
 
     # Create summary DataFrame
     data = {
-        'Config': results['names'],
-        'Allocation Strategy': [c['allocation_strategy'] for c in results['configs']],
-        'Estimation Method': ['Direct' if c['use_direct_estimation'] else 'CS'
-                             for c in results['configs']],
-        'N Samples': [c['n_samples'] for c in results['configs']],
-        'Time (s)': results['times'],
-        'L2 Error': results['errors']
+        "Config": results["names"],
+        "Allocation Strategy": [c["allocation_strategy"] for c in results["configs"]],
+        "Estimation Method": [
+            "Direct" if c["use_direct_estimation"] else "CS" for c in results["configs"]
+        ],
+        "N Samples": [c["n_samples"] for c in results["configs"]],
+        "Time (s)": results["times"],
+        "L2 Error": results["errors"],
     }
 
     df = pd.DataFrame(data)
@@ -458,17 +460,17 @@ def plot_error_comparison(results, output_dir=None):
     if output_dir is None:
         output_dir = _ensure_output_dir()
 
-    dataset = results['dataset']
+    dataset = results["dataset"]
 
     # Filter out None errors
-    valid_indices = [i for i, e in enumerate(results['errors']) if e is not None]
+    valid_indices = [i for i, e in enumerate(results["errors"]) if e is not None]
     if not valid_indices:
         print("No error data available for plotting")
         return
 
-    names = [results['names'][i] for i in valid_indices]
-    errors = [results['errors'][i] for i in valid_indices]
-    strategies = [results['configs'][i]['allocation_strategy'] for i in valid_indices]
+    names = [results["names"][i] for i in valid_indices]
+    errors = [results["errors"][i] for i in valid_indices]
+    strategies = [results["configs"][i]["allocation_strategy"] for i in valid_indices]
 
     # Create figure
     fig, ax = plt.subplots(figsize=PLOT_FIGSIZE)
@@ -482,28 +484,33 @@ def plot_error_comparison(results, output_dir=None):
 
     # Plot bars
     x_pos = np.arange(len(names))
-    bars = ax.bar(x_pos, errors, color=bar_colors, alpha=0.7, edgecolor='black')
+    bars = ax.bar(x_pos, errors, color=bar_colors, alpha=0.7, edgecolor="black")
 
     # Customize plot
-    ax.set_xlabel('Configuration', fontsize=12, fontweight='bold')
-    ax.set_ylabel('L2 Error', fontsize=12, fontweight='bold')
-    ax.set_title(f'Stratified Shapley Parameter Comparison - L2 Error ({dataset})',
-                 fontsize=14, fontweight='bold')
+    ax.set_xlabel("Configuration", fontsize=12, fontweight="bold")
+    ax.set_ylabel("L2 Error", fontsize=12, fontweight="bold")
+    ax.set_title(
+        f"Stratified Shapley Parameter Comparison - L2 Error ({dataset})",
+        fontsize=14,
+        fontweight="bold",
+    )
     ax.set_xticks(x_pos)
-    ax.set_xticklabels(names, rotation=90, ha='right', fontsize=8)
-    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    ax.set_xticklabels(names, rotation=90, ha="right", fontsize=8)
+    ax.grid(axis="y", alpha=0.3, linestyle="--")
 
     # Add legend
     from matplotlib.patches import Patch
-    legend_elements = [Patch(facecolor=color_map[s], label=s)
-                      for s in unique_strategies]
-    ax.legend(handles=legend_elements, title='Allocation Strategy', loc='best')
+
+    legend_elements = [
+        Patch(facecolor=color_map[s], label=s) for s in unique_strategies
+    ]
+    ax.legend(handles=legend_elements, title="Allocation Strategy", loc="best")
 
     plt.tight_layout()
 
     # Save plot
     plot_path = output_dir / f"stratified_error_comparison_{dataset}.pdf"
-    plt.savefig(plot_path, bbox_inches='tight', dpi=PLOT_DPI)
+    plt.savefig(plot_path, bbox_inches="tight", dpi=PLOT_DPI)
     print(f"Saved error comparison plot to: {plot_path}")
 
     plt.close()
@@ -518,10 +525,10 @@ def plot_time_comparison(results, output_dir=None):
     if output_dir is None:
         output_dir = _ensure_output_dir()
 
-    dataset = results['dataset']
+    dataset = results["dataset"]
 
     # Filter out None times
-    valid_indices = [i for i, t in enumerate(results['times']) if t is not None]
+    valid_indices = [i for i, t in enumerate(results["times"]) if t is not None]
     if not valid_indices:
         print("No timing data available for plotting")
         return
@@ -529,7 +536,7 @@ def plot_time_comparison(results, output_dir=None):
     # Build time results dict and sort by time
     time_results = {}
     for i in valid_indices:
-        time_results[results['names'][i]] = results['times'][i]
+        time_results[results["names"][i]] = results["times"][i]
 
     # Sort by time for better visualization (fastest first)
     sorted_items = sorted(time_results.items(), key=lambda x: x[1])
@@ -539,30 +546,47 @@ def plot_time_comparison(results, output_dir=None):
     # Create horizontal bar chart (same style as benchmark_qr_new_api.py)
     plt.figure(figsize=PLOT_FIGSIZE)
     colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(algorithms)))
-    bars = plt.barh(algorithms, times, color=colors, alpha=0.7, edgecolor='black')
+    bars = plt.barh(algorithms, times, color=colors, alpha=0.7, edgecolor="black")
 
     # Add value labels on bars
     for i, (bar, time_val) in enumerate(zip(bars, times)):
-        plt.text(time_val, i, f' {time_val:.2f}s',
-                va='center', ha='left', fontweight='bold', fontsize=10)
+        plt.text(
+            time_val,
+            i,
+            f" {time_val:.2f}s",
+            va="center",
+            ha="left",
+            fontweight="bold",
+            fontsize=10,
+        )
 
-    plt.xlabel('Execution Time (seconds)', fontsize=12, fontweight='bold')
-    plt.ylabel('Algorithm', fontsize=12, fontweight='bold')
-    plt.title(f'Stratified Shapley Execution Time Comparison ({dataset})', fontsize=14, fontweight='bold')
-    plt.grid(axis='x', alpha=0.3, linestyle='--')
+    plt.xlabel("Execution Time (seconds)", fontsize=12, fontweight="bold")
+    plt.ylabel("Algorithm", fontsize=12, fontweight="bold")
+    plt.title(
+        f"Stratified Shapley Execution Time Comparison ({dataset})",
+        fontsize=14,
+        fontweight="bold",
+    )
+    plt.grid(axis="x", alpha=0.3, linestyle="--")
     plt.tight_layout()
 
     # Save plot
     plot_path = output_dir / f"stratified_time_comparison_{dataset}.pdf"
-    plt.savefig(plot_path, bbox_inches='tight', dpi=PLOT_DPI)
+    plt.savefig(plot_path, bbox_inches="tight", dpi=PLOT_DPI)
     print(f"Saved time comparison plot to: {plot_path}")
 
     plt.close()
     return plot_path
 
 
-def _compute_kpi_results(reader, feature_rankings, model, limit=10,
-                         retrain_kpi=False, imputation_strategy='mean'):
+def _compute_kpi_results(
+    reader,
+    feature_rankings,
+    model,
+    limit=10,
+    retrain_kpi=False,
+    imputation_strategy="mean",
+):
     """
     Compute KPI results by progressively dropping features.
 
@@ -595,7 +619,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
         initial_metric = _get_metric_score(model, y_test, y_pred)
 
         for method, feature_order in feature_rankings.items():
-            feature_order = [feat if isinstance(feat, str) else feat[0] for feat in feature_order]
+            feature_order = [
+                feat if isinstance(feat, str) else feat[0] for feat in feature_order
+            ]
             if limit:
                 feature_order = feature_order[:limit]
 
@@ -626,9 +652,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
 
             weights = [WEIGHTED_SLOPE_BETA**i for i in range(len(deltas))]
             results[method] = {
-                'Features': features,
-                'Metrics': metrics,
-                'Slope': np.dot(deltas, weights) if deltas else 0
+                "Features": features,
+                "Metrics": metrics,
+                "Slope": np.dot(deltas, weights) if deltas else 0,
             }
     else:
         # MASKING MODE: Train once, mask excluded features
@@ -640,14 +666,19 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
         # Compute baseline statistics from training set
         col_means = x_train.mean(numeric_only=True)
         col_modes = {
-            c: (x_train[c].mode(dropna=True).iloc[0]
-                if not pd.api.types.is_numeric_dtype(x_train[c]) and not x_train[c].mode().empty
-                else None)
+            c: (
+                x_train[c].mode(dropna=True).iloc[0]
+                if not pd.api.types.is_numeric_dtype(x_train[c])
+                and not x_train[c].mode().empty
+                else None
+            )
             for c in x_train.columns
         }
 
         # Random number generator for permutation
-        rng = np.random.default_rng(42) if imputation_strategy == 'permutation' else None
+        rng = (
+            np.random.default_rng(42) if imputation_strategy == "permutation" else None
+        )
 
         def mask_features(X_df, keep_cols):
             """Mask features not in keep_cols using specified strategy."""
@@ -655,9 +686,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
             drop_cols = [c for c in X_df.columns if c not in keep_cols]
 
             for c in drop_cols:
-                if imputation_strategy == 'zero':
+                if imputation_strategy == "zero":
                     X_masked[c] = 0
-                elif imputation_strategy == 'permutation':
+                elif imputation_strategy == "permutation":
                     X_masked[c] = rng.permutation(X_masked[c].values)
                 else:  # 'mean' (default)
                     if pd.api.types.is_numeric_dtype(X_masked[c]):
@@ -674,7 +705,9 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
 
         # Process each ranking method
         for method, feature_order in feature_rankings.items():
-            feature_order = [feat if isinstance(feat, str) else feat[0] for feat in feature_order]
+            feature_order = [
+                feat if isinstance(feat, str) else feat[0] for feat in feature_order
+            ]
             if limit:
                 feature_order = feature_order[:limit]
 
@@ -702,16 +735,24 @@ def _compute_kpi_results(reader, feature_rankings, model, limit=10,
 
             weights = [WEIGHTED_SLOPE_BETA**i for i in range(len(deltas))]
             results[method] = {
-                'Features': features,
-                'Metrics': metrics,
-                'Slope': np.dot(deltas, weights) if deltas else 0
+                "Features": features,
+                "Metrics": metrics,
+                "Slope": np.dot(deltas, weights) if deltas else 0,
             }
 
     return results
 
 
-def plot_kpi_comparison(reader, results, model, dataset, limit=10,
-                       retrain_kpi=False, imputation_strategy='mean', output_dir=None):
+def plot_kpi_comparison(
+    reader,
+    results,
+    model,
+    dataset,
+    limit=10,
+    retrain_kpi=False,
+    imputation_strategy="mean",
+    output_dir=None,
+):
     """
     Plot KPI comparison for different Stratified Shapley configurations.
 
@@ -739,8 +780,8 @@ def plot_kpi_comparison(reader, results, model, dataset, limit=10,
     X, y = reader()
     feature_rankings = {}
 
-    for i, config_name in enumerate(results['names']):
-        values = results['shapley_values'][i]
+    for i, config_name in enumerate(results["names"]):
+        values = results["shapley_values"][i]
         if not values:
             continue
 
@@ -773,7 +814,7 @@ def plot_kpi_comparison(reader, results, model, dataset, limit=10,
         model,
         limit,
         retrain_kpi=retrain_kpi,
-        imputation_strategy=imputation_strategy
+        imputation_strategy=imputation_strategy,
     )
 
     # Create plot
@@ -785,21 +826,20 @@ def plot_kpi_comparison(reader, results, model, dataset, limit=10,
     for method, data in kpi_results.items():
         label = f'{method} $S$={data["Slope"]:.4f}'
         plt.plot(
-            range(len(data['Metrics'])),
-            data['Metrics'],
-            label=label,
-            alpha=PLOT_ALPHA
+            range(len(data["Metrics"])), data["Metrics"], label=label, alpha=PLOT_ALPHA
         )
 
-    plt.xlabel('Number of Features Dropped')
+    plt.xlabel("Number of Features Dropped")
     plt.ylabel(metric_name)
-    plt.title(f'Stratified Shapley Parameter Comparison - {metric_name} after dropping features ({model_name})')
+    plt.title(
+        f"Stratified Shapley Parameter Comparison - {metric_name} after dropping features ({model_name})"
+    )
     plt.legend()
     plt.grid()
 
     # Save plot
     plot_path = output_dir / f"stratified_kpi_{dataset}_{imputation_strategy}.pdf"
-    plt.savefig(plot_path, bbox_inches='tight', dpi=PLOT_DPI)
+    plt.savefig(plot_path, bbox_inches="tight", dpi=PLOT_DPI)
     print(f"Saved KPI comparison plot to: {plot_path}")
 
     plt.close()
@@ -819,32 +859,43 @@ def print_summary_table(results):
     print("-" * 130)
 
     # Get valid times for relative speed calculation
-    valid_times = [t for t in results['times'] if t is not None]
+    valid_times = [t for t in results["times"] if t is not None]
     fastest_time = min(valid_times) if valid_times else 1.0
 
     # Print rows sorted by error (if available)
-    indices = list(range(len(results['names'])))
-    if any(e is not None for e in results['errors']):
-        indices = sorted(indices, key=lambda i: results['errors'][i] if results['errors'][i] is not None else float('inf'))
+    indices = list(range(len(results["names"])))
+    if any(e is not None for e in results["errors"]):
+        indices = sorted(
+            indices,
+            key=lambda i: (
+                results["errors"][i]
+                if results["errors"][i] is not None
+                else float("inf")
+            ),
+        )
 
     for i in indices:
-        name = results['names'][i]
-        config = results['configs'][i]
-        strategy = config['allocation_strategy']
-        method = 'Direct' if config['use_direct_estimation'] else 'CS'
-        n_samples = config['n_samples']
+        name = results["names"][i]
+        config = results["configs"][i]
+        strategy = config["allocation_strategy"]
+        method = "Direct" if config["use_direct_estimation"] else "CS"
+        n_samples = config["n_samples"]
 
-        if results['times'][i] is not None:
+        if results["times"][i] is not None:
             time_val = f"{results['times'][i]:.2f}"
-            relative_speed = results['times'][i] / fastest_time
+            relative_speed = results["times"][i] / fastest_time
             relative_val = f"{relative_speed:.1f}x"
         else:
             time_val = "N/A"
             relative_val = "N/A"
 
-        error_val = f"{results['errors'][i]:.6f}" if results['errors'][i] is not None else "N/A"
+        error_val = (
+            f"{results['errors'][i]:.6f}" if results["errors"][i] is not None else "N/A"
+        )
 
-        print(f"{name:<40} {strategy:<20} {method:<8} {n_samples:<8} {time_val:<12} {relative_val:<10} {error_val:<12}")
+        print(
+            f"{name:<40} {strategy:<20} {method:<8} {n_samples:<8} {time_val:<12} {relative_val:<10} {error_val:<12}"
+        )
 
     print("=" * 130)
 
@@ -863,9 +914,9 @@ def _print_time_comparison_table(results):
 
     # Build time results dict (filter out None values)
     time_results = {}
-    for i, name in enumerate(results['names']):
-        if results['times'][i] is not None:
-            time_results[name] = results['times'][i]
+    for i, name in enumerate(results["names"]):
+        if results["times"][i] is not None:
+            time_results[name] = results["times"][i]
 
     if not time_results:
         print("No valid time results to display.")
@@ -896,56 +947,54 @@ def _print_time_comparison_table(results):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='Benchmark different Stratified Shapley parameter configurations',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        description="Benchmark different Stratified Shapley parameter configurations",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
-        '--dataset',
-        choices=['housing', 'h1n1'],
-        default='housing',
-        help='Dataset to use (default: housing)'
+        "--dataset",
+        choices=["housing", "h1n1"],
+        default="housing",
+        help="Dataset to use (default: housing)",
     )
 
     parser.add_argument(
-        '--no-exact',
-        action='store_true',
-        help='Skip exact Shapley computation (faster for large graphs)'
+        "--no-exact",
+        action="store_true",
+        help="Skip exact Shapley computation (faster for large graphs)",
     )
 
     parser.add_argument(
-        '--imputation',
-        choices=['mean', 'zero', 'permutation'],
-        default='mean',
-        help='Masking strategy (default: mean)'
+        "--imputation",
+        choices=["mean", "zero", "permutation"],
+        default="mean",
+        help="Masking strategy (default: mean)",
     )
 
     parser.add_argument(
-        '--kpi-limit',
+        "--kpi-limit",
         type=int,
         default=10,
-        help='Number of top features to evaluate in KPI plot (default: 10)'
+        help="Number of top features to evaluate in KPI plot (default: 10)",
     )
 
     parser.add_argument(
-        '--retrain-kpi',
-        action='store_true',
-        help='Use retraining (not masking) for KPI plots. '
-             'Slower but measures true feature importance for model quality. '
-             'Default is to use masking (consistent with Shapley computation).'
+        "--retrain-kpi",
+        action="store_true",
+        help="Use retraining (not masking) for KPI plots. "
+        "Slower but measures true feature importance for model quality. "
+        "Default is to use masking (consistent with Shapley computation).",
     )
 
     parser.add_argument(
-        '--retrain',
-        action='store_true',
-        help='Use retraining approach (slow, retrains model for each coalition). '
-             'Default is to use efficient masking (~100x faster).'
+        "--retrain",
+        action="store_true",
+        help="Use retraining approach (slow, retrains model for each coalition). "
+        "Default is to use efficient masking (~100x faster).",
     )
 
     parser.add_argument(
-        '--no-cache',
-        action='store_true',
-        help='Disable caching of results'
+        "--no-cache", action="store_true", help="Disable caching of results"
     )
 
     args = parser.parse_args()
@@ -967,7 +1016,7 @@ if __name__ == "__main__":
     print(f"  Sample budgets: {N_SAMPLES_OPTIONS}")
 
     # Select dataset and model
-    if args.dataset == 'housing':
+    if args.dataset == "housing":
         reader = housing_data_reader
         model = lgb.LGBMRegressor(learning_rate=0.3, verbosity=-1)
         print(f"  Task: Regression (R² metric)")
@@ -984,7 +1033,7 @@ if __name__ == "__main__":
         compute_exact=not args.no_exact,
         imputation_strategy=args.imputation,
         use_cache=not args.no_cache,
-        retrain_kpi=args.retrain_kpi
+        retrain_kpi=args.retrain_kpi,
     )
 
     # Print summary
@@ -1014,36 +1063,35 @@ if __name__ == "__main__":
         dataset=args.dataset,
         limit=args.kpi_limit,
         retrain_kpi=args.retrain_kpi,
-        imputation_strategy=args.imputation
+        imputation_strategy=args.imputation,
     )
 
     if kpi_results:
         # Export KPI metrics to CSV
-        kpi_csv_data = {
-            'Config': [],
-            'Weighted Slope (S)': []
-        }
+        kpi_csv_data = {"Config": [], "Weighted Slope (S)": []}
 
         # Determine max number of metrics
-        max_metrics = max(len(data['Metrics']) for data in kpi_results.values())
+        max_metrics = max(len(data["Metrics"]) for data in kpi_results.values())
         for i in range(max_metrics):
-            kpi_csv_data[f'Metric_{i}'] = []
+            kpi_csv_data[f"Metric_{i}"] = []
 
         # Populate data
         for config_name in sorted(kpi_results.keys()):
             data = kpi_results[config_name]
-            kpi_csv_data['Config'].append(config_name)
-            kpi_csv_data['Weighted Slope (S)'].append(data['Slope'])
+            kpi_csv_data["Config"].append(config_name)
+            kpi_csv_data["Weighted Slope (S)"].append(data["Slope"])
 
-            metrics = data['Metrics']
+            metrics = data["Metrics"]
             for i in range(max_metrics):
                 if i < len(metrics):
-                    kpi_csv_data[f'Metric_{i}'].append(metrics[i])
+                    kpi_csv_data[f"Metric_{i}"].append(metrics[i])
                 else:
-                    kpi_csv_data[f'Metric_{i}'].append('')
+                    kpi_csv_data[f"Metric_{i}"].append("")
 
         kpi_df = pd.DataFrame(kpi_csv_data)
-        kpi_csv_path = OUTPUT_DIR / f"stratified_kpi_metrics_{args.dataset}_{args.imputation}.csv"
+        kpi_csv_path = (
+            OUTPUT_DIR / f"stratified_kpi_metrics_{args.dataset}_{args.imputation}.csv"
+        )
         kpi_df.to_csv(kpi_csv_path, index=False)
         print(f"Saved KPI metrics to: {kpi_csv_path}")
 

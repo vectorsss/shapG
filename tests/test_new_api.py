@@ -24,7 +24,7 @@ from shapG import (
     CustomFunction,
     GraphBuilder,
     CoalitionManager,
-    FeatureImportanceVisualizer
+    FeatureImportanceVisualizer,
 )
 from shapG.explainer import BlockQRCSExplainer
 
@@ -74,6 +74,7 @@ class TestCharacteristicFunctions(unittest.TestCase):
 
     def test_custom_function(self):
         """Test custom function wrapper."""
+
         def my_func(coalition, context):
             return len(coalition) * 2
 
@@ -138,7 +139,7 @@ class TestCoalitionManager(unittest.TestCase):
 
     def test_sample_coalitions_uniform(self):
         """Test uniform coalition sampling."""
-        samples = self.manager.sample_coalitions(2, n_samples=10, strategy='uniform')
+        samples = self.manager.sample_coalitions(2, n_samples=10, strategy="uniform")
 
         self.assertEqual(len(samples), 10)
         for sample in samples:
@@ -146,7 +147,7 @@ class TestCoalitionManager(unittest.TestCase):
 
     def test_sample_coalitions_stratified(self):
         """Test stratified coalition sampling."""
-        samples = self.manager.sample_coalitions(2, n_samples=10, strategy='stratified')
+        samples = self.manager.sample_coalitions(2, n_samples=10, strategy="stratified")
 
         self.assertEqual(len(samples), 10)
         # Check that we have various coalition sizes
@@ -161,9 +162,9 @@ class TestExplainers(unittest.TestCase):
         """Set up test data and graph."""
         # Create a simple test graph
         self.G = nx.Graph()
-        self.G.add_edges_from([(0, 1, {'weight': 1}),
-                              (1, 2, {'weight': 2}),
-                              (2, 0, {'weight': 3})])
+        self.G.add_edges_from(
+            [(0, 1, {"weight": 1}), (1, 2, {"weight": 2}), (2, 0, {"weight": 3})]
+        )
 
         # Create test data
         np.random.seed(42)
@@ -242,7 +243,9 @@ class TestExplainers(unittest.TestCase):
 
     def test_block_qrcs_explainer(self):
         """Test Block QR-CS explainer."""
-        explainer = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
+        explainer = BlockQRCSExplainer(
+            n_blocks=2, parallel=False, use_fast_fallback=False
+        )
         shapley_values = explainer.fit_explain(self.G)
 
         self.assertEqual(len(shapley_values), 3)
@@ -261,7 +264,7 @@ class TestExplainers(unittest.TestCase):
         """Test setting and getting feature names."""
         explainer = ShapGExplainer()
 
-        names = ['feature_1', 'feature_2', 'feature_3']
+        names = ["feature_1", "feature_2", "feature_3"]
         explainer.set_feature_names(names)
 
         self.assertEqual(explainer.get_feature_names(), names)
@@ -290,8 +293,8 @@ class TestVisualization(unittest.TestCase):
         viz = FeatureImportanceVisualizer()
 
         importance_dict = {
-            'Method1': {0: 0.5, 1: 0.3, 2: 0.2},
-            'Method2': {0: 0.4, 1: 0.4, 2: 0.2}
+            "Method1": {0: 0.5, 1: 0.3, 2: 0.2},
+            "Method2": {0: 0.4, 1: 0.4, 2: 0.2},
         }
 
         fig, ax = viz.plot_comparison(importance_dict, show_plot=False)
@@ -328,15 +331,15 @@ class TestIntegration(unittest.TestCase):
 
         # Visualize (without showing)
         viz = FeatureImportanceVisualizer()
-        fig, ax = viz.plot_comparison({
-            'Exact': exact_values,
-            'Approximate': approx_values
-        }, show_plot=False)
+        fig, ax = viz.plot_comparison(
+            {"Exact": exact_values, "Approximate": approx_values}, show_plot=False
+        )
 
         self.assertIsNotNone(fig)
 
     def test_custom_characteristic_function(self):
         """Test using custom characteristic function."""
+
         # Define custom function
         def my_characteristic(coalition, graph):
             if not coalition:
@@ -354,5 +357,5 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(len(values), 4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

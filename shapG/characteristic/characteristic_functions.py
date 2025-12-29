@@ -11,7 +11,9 @@ from ..explainer.base import CharacteristicFunction
 class CoalitionDegree(CharacteristicFunction):
     """Characteristic function based on coalition degree in a graph."""
 
-    def __call__(self, coalition: Set[int], context: Optional[nx.Graph] = None) -> float:
+    def __call__(
+        self, coalition: Set[int], context: Optional[nx.Graph] = None
+    ) -> float:
         """Compute coalition degree based on the coalition's behavior.
 
         Returns the sum of weighted degrees in the induced subgraph divided by 2
@@ -29,7 +31,9 @@ class CoalitionDegree(CharacteristicFunction):
             return 0.0
 
         if context is None:
-            raise AttributeError("Graph context is required for CoalitionDegree computation")
+            raise AttributeError(
+                "Graph context is required for CoalitionDegree computation"
+            )
 
         G = context
 
@@ -37,7 +41,7 @@ class CoalitionDegree(CharacteristicFunction):
         subgraph = G.subgraph(coalition)
 
         # Always use weighted degrees (NetworkX treats missing weights as 1)
-        return float(sum(dict(subgraph.degree(weight='weight')).values()) / 2)
+        return float(sum(dict(subgraph.degree(weight="weight")).values()) / 2)
 
 
 class NodeCount(CharacteristicFunction):
@@ -59,7 +63,11 @@ class NodeCount(CharacteristicFunction):
 class WeightedSum(CharacteristicFunction):
     """Characteristic function based on weighted sum of features."""
 
-    def __init__(self, weights: Optional[Union[dict, np.ndarray]] = None, name: Optional[str] = None):
+    def __init__(
+        self,
+        weights: Optional[Union[dict, np.ndarray]] = None,
+        name: Optional[str] = None,
+    ):
         """Initialize with optional weights.
 
         Args:
@@ -75,7 +83,9 @@ class WeightedSum(CharacteristicFunction):
         else:
             self.weights = weights
 
-    def __call__(self, coalition: Set[int], context: Optional[np.ndarray] = None) -> float:
+    def __call__(
+        self, coalition: Set[int], context: Optional[np.ndarray] = None
+    ) -> float:
         """Compute weighted sum of features in coalition.
 
         Args:
@@ -96,7 +106,11 @@ class WeightedSum(CharacteristicFunction):
 
         # Sum feature values, optionally weighted
         coalition_indices = list(coalition)
-        values = context[coalition_indices] if context.ndim == 1 else context[:, coalition_indices].sum(axis=0)
+        values = (
+            context[coalition_indices]
+            if context.ndim == 1
+            else context[:, coalition_indices].sum(axis=0)
+        )
 
         if self.weights:  # Non-empty dict
             weights = np.array([self.weights.get(i, 0.0) for i in coalition_indices])
@@ -134,7 +148,9 @@ class CustomFunction(CharacteristicFunction):
 class CenterOfImputationSet(CharacteristicFunction):
     """Characteristic function for Center of Imputation Set (CIS)."""
 
-    def __init__(self, data: np.ndarray, model: Any, baseline: Optional[np.ndarray] = None):
+    def __init__(
+        self, data: np.ndarray, model: Any, baseline: Optional[np.ndarray] = None
+    ):
         """Initialize CIS characteristic function.
 
         Args:

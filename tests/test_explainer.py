@@ -13,12 +13,18 @@ import os
 import random
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from shapG.explainer import (
-    CharacteristicFunction, Explainer, GraphExplainer,
-    ExactExplainer, ShapGExplainer, CISExplainer,
-    RandomCSExplainer, QRCSExplainer, BlockQRCSExplainer
+    CharacteristicFunction,
+    Explainer,
+    GraphExplainer,
+    ExactExplainer,
+    ShapGExplainer,
+    CISExplainer,
+    RandomCSExplainer,
+    QRCSExplainer,
+    BlockQRCSExplainer,
 )
 from shapG.characteristic import CoalitionDegree, NodeCount, CustomFunction
 
@@ -33,6 +39,7 @@ class TestCharacteristicFunction(unittest.TestCase):
 
     def test_batch_compute_default_implementation(self):
         """Test default batch_compute implementation."""
+
         class TestFunction(CharacteristicFunction):
             def __call__(self, coalition, context=None):
                 return len(coalition)
@@ -56,6 +63,7 @@ class TestExplainerBase(unittest.TestCase):
 
     def test_feature_names_management(self):
         """Test feature names get/set functionality."""
+
         class TestExplainer(Explainer):
             def __init__(self):
                 super().__init__()
@@ -69,7 +77,7 @@ class TestExplainerBase(unittest.TestCase):
         explainer = TestExplainer()
 
         # Test setting and getting feature names
-        names = ['A', 'B', 'C']
+        names = ["A", "B", "C"]
         explainer.set_feature_names(names)
         self.assertEqual(explainer.get_feature_names(), names)
 
@@ -83,6 +91,7 @@ class TestGraphExplainerBase(unittest.TestCase):
 
     def test_initialization(self):
         """Test GraphExplainer initialization."""
+
         class TestGraphExplainer(GraphExplainer):
             def fit(self, X, **kwargs):
                 return self
@@ -99,6 +108,7 @@ class TestGraphExplainerBase(unittest.TestCase):
 
     def test_graph_and_coalition_management(self):
         """Test graph and coalition setting."""
+
         class TestGraphExplainer(GraphExplainer):
             def fit(self, X, **kwargs):
                 return self
@@ -186,6 +196,7 @@ class TestExactExplainer(unittest.TestCase):
 
     def test_with_custom_characteristic_function(self):
         """Test with custom characteristic function."""
+
         def custom_func(coalition, context=None):
             return len(coalition) ** 2
 
@@ -216,7 +227,7 @@ class TestShapGExplainer(unittest.TestCase):
             n_samples=10,
             approximate_by_ratio=False,
             scale=True,
-            verbose=True
+            verbose=True,
         )
 
         self.assertEqual(explainer.characteristic_function, self.char_func)
@@ -312,7 +323,9 @@ class TestShapGExplainer(unittest.TestCase):
         grand_coalition_value = self.char_func(set(self.G.nodes()), self.G)
 
         # Allow tolerance for approximate method
-        relative_error = abs(total_value - grand_coalition_value) / max(abs(grand_coalition_value), 1e-6)
+        relative_error = abs(total_value - grand_coalition_value) / max(
+            abs(grand_coalition_value), 1e-6
+        )
         self.assertLess(relative_error, 0.5)  # Within 50%
 
 
@@ -411,7 +424,7 @@ class TestRandomCSExplainer(unittest.TestCase):
             t=50,
             tolerance=1e-3,
             verbose=True,
-            seed=42
+            seed=42,
         )
         self.assertEqual(explainer.characteristic_function, self.char_func)
         self.assertEqual(explainer.m, 100)
@@ -506,7 +519,7 @@ class TestQRCSExplainer(unittest.TestCase):
             n_measurements=50,
             tolerance=5e-5,
             use_fast_fallback=False,
-            verbose=True
+            verbose=True,
         )
         self.assertEqual(explainer.characteristic_function, self.char_func)
         self.assertEqual(explainer.n_measurements, 50)
@@ -595,7 +608,7 @@ class TestBlockQRCSExplainer(unittest.TestCase):
             use_fast_fallback=False,
             parallel=True,
             max_workers=2,
-            verbose=True
+            verbose=True,
         )
         self.assertEqual(explainer.characteristic_function, self.char_func)
         self.assertEqual(explainer.n_blocks, 4)
@@ -622,7 +635,9 @@ class TestBlockQRCSExplainer(unittest.TestCase):
 
     def test_fit_and_explain(self):
         """Test fit and explain methods."""
-        explainer = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
+        explainer = BlockQRCSExplainer(
+            n_blocks=2, parallel=False, use_fast_fallback=False
+        )
         values = explainer.fit_explain(self.G)
 
         # Check output structure
@@ -643,12 +658,18 @@ class TestBlockQRCSExplainer(unittest.TestCase):
 
         # Should produce similar results
         for node in self.G.nodes():
-            self.assertAlmostEqual(values_parallel[node], values_sequential[node], places=5)
+            self.assertAlmostEqual(
+                values_parallel[node], values_sequential[node], places=5
+            )
 
     def test_different_block_sizes(self):
         """Test with different numbers of blocks."""
-        explainer1 = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=True)
-        explainer2 = BlockQRCSExplainer(n_blocks=4, parallel=False, use_fast_fallback=True)
+        explainer1 = BlockQRCSExplainer(
+            n_blocks=2, parallel=False, use_fast_fallback=True
+        )
+        explainer2 = BlockQRCSExplainer(
+            n_blocks=4, parallel=False, use_fast_fallback=True
+        )
 
         values1 = explainer1.fit_explain(self.G)
         values2 = explainer2.fit_explain(self.G)
@@ -682,8 +703,12 @@ class TestBlockQRCSExplainer(unittest.TestCase):
 
     def test_deterministic_results(self):
         """Test that Block QR-CS produces deterministic results."""
-        explainer1 = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
-        explainer2 = BlockQRCSExplainer(n_blocks=2, parallel=False, use_fast_fallback=False)
+        explainer1 = BlockQRCSExplainer(
+            n_blocks=2, parallel=False, use_fast_fallback=False
+        )
+        explainer2 = BlockQRCSExplainer(
+            n_blocks=2, parallel=False, use_fast_fallback=False
+        )
 
         values1 = explainer1.fit_explain(self.G)
         values2 = explainer2.fit_explain(self.G)
@@ -691,7 +716,6 @@ class TestBlockQRCSExplainer(unittest.TestCase):
         # Should produce identical results (deterministic method)
         for node in self.G.nodes():
             self.assertAlmostEqual(values1[node], values2[node], places=6)
-
 
 
 class TestExplainerIntegration(unittest.TestCase):
@@ -719,11 +743,18 @@ class TestExplainerIntegration(unittest.TestCase):
         # All should satisfy efficiency
         grand_coalition_value = char_func(set(G.nodes()), G)
 
-        self.assertAlmostEqual(sum(exact_values.values()), grand_coalition_value, places=6)
-        self.assertAlmostEqual(sum(cis_values.values()), grand_coalition_value, places=6)
+        self.assertAlmostEqual(
+            sum(exact_values.values()), grand_coalition_value, places=6
+        )
+        self.assertAlmostEqual(
+            sum(cis_values.values()), grand_coalition_value, places=6
+        )
 
         # ShapG should be approximately efficient
-        relative_error = abs(sum(shapg_values.values()) - grand_coalition_value) / grand_coalition_value
+        relative_error = (
+            abs(sum(shapg_values.values()) - grand_coalition_value)
+            / grand_coalition_value
+        )
         self.assertLess(relative_error, 0.3)
 
     def test_explainer_with_different_data_types(self):
@@ -736,7 +767,7 @@ class TestExplainerIntegration(unittest.TestCase):
         data_np = np.random.randn(10, 3)
 
         # Pandas DataFrame
-        data_pd = pd.DataFrame(data_np, columns=['A', 'B', 'C'])
+        data_pd = pd.DataFrame(data_np, columns=["A", "B", "C"])
 
         explainer = ExactExplainer(CoalitionDegree())
 
@@ -751,15 +782,17 @@ class TestExplainerIntegration(unittest.TestCase):
 
     def test_feature_names_preservation(self):
         """Test that feature names are preserved through pipeline."""
-        data = pd.DataFrame(np.random.randn(10, 3), columns=['Feature_A', 'Feature_B', 'Feature_C'])
+        data = pd.DataFrame(
+            np.random.randn(10, 3), columns=["Feature_A", "Feature_B", "Feature_C"]
+        )
 
         explainer = ExactExplainer(CoalitionDegree())
         values = explainer.fit_explain(data)
 
         # Should use DataFrame column names as keys
-        expected_keys = {'Feature_A', 'Feature_B', 'Feature_C'}
+        expected_keys = {"Feature_A", "Feature_B", "Feature_C"}
         self.assertEqual(set(values.keys()), expected_keys)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

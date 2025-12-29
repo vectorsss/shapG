@@ -52,9 +52,9 @@ class ModelBasedCharacteristic(CharacteristicFunction):
         model: Any,
         X: Union[np.ndarray, pd.DataFrame],
         y: np.ndarray,
-        masking_strategy: str = 'mean',
+        masking_strategy: str = "mean",
         metric_fn: Optional[Callable] = None,
-        name: Optional[str] = None
+        name: Optional[str] = None,
     ):
         """
         Initialize model-based characteristic function.
@@ -101,13 +101,13 @@ class ModelBasedCharacteristic(CharacteristicFunction):
 
     def _compute_baseline(self, strategy: str) -> np.ndarray:
         """Compute baseline values for feature masking."""
-        if strategy == 'zero':
+        if strategy == "zero":
             return np.zeros(self.X.shape[1])
-        elif strategy == 'mean':
+        elif strategy == "mean":
             return np.mean(self.X, axis=0)
-        elif strategy == 'median':
+        elif strategy == "median":
             return np.median(self.X, axis=0)
-        elif strategy == 'noise':
+        elif strategy == "noise":
             # Random noise scaled by feature std
             return np.random.randn(self.X.shape[1]) * np.std(self.X, axis=0)
         else:
@@ -197,10 +197,10 @@ class GraphModelCharacteristic(CharacteristicFunction):
         model: Any,
         X: pd.DataFrame,
         y: np.ndarray,
-        masking_strategy: str = 'mean',
+        masking_strategy: str = "mean",
         metric_fn: Optional[Callable] = None,
         name: Optional[str] = None,
-        baseline: Optional[np.ndarray] = None
+        baseline: Optional[np.ndarray] = None,
     ):
         """
         Initialize graph-aware model characteristic function.
@@ -228,24 +228,30 @@ class GraphModelCharacteristic(CharacteristicFunction):
             self.baseline = baseline
         else:
             # Compute baseline values from X (WARNING: if X is test set, this may not be ideal)
-            if masking_strategy == 'mean':
+            if masking_strategy == "mean":
                 self.baseline = X.mean().values
-            elif masking_strategy == 'median':
+            elif masking_strategy == "median":
                 self.baseline = X.median().values
-            elif masking_strategy == 'zero':
+            elif masking_strategy == "zero":
                 self.baseline = np.zeros(len(self.feature_names))
-            elif masking_strategy == 'permutation':
+            elif masking_strategy == "permutation":
                 # For permutation, we'll shuffle on-the-fly in __call__
                 self.baseline = None
-            elif masking_strategy == 'noise':
-                self.baseline = np.random.randn(len(self.feature_names)) * X.std().values
+            elif masking_strategy == "noise":
+                self.baseline = (
+                    np.random.randn(len(self.feature_names)) * X.std().values
+                )
             else:
                 raise ValueError(f"Unknown masking strategy: {masking_strategy}")
 
         # For permutation, store random seed for reproducibility
-        self.rng = np.random.default_rng(42) if masking_strategy == 'permutation' else None
+        self.rng = (
+            np.random.default_rng(42) if masking_strategy == "permutation" else None
+        )
 
-    def __call__(self, coalition: Set[Union[int, str]], context: Optional[nx.Graph] = None) -> float:
+    def __call__(
+        self, coalition: Set[Union[int, str]], context: Optional[nx.Graph] = None
+    ) -> float:
         """
         Evaluate model with coalition of features/nodes.
 
@@ -277,7 +283,7 @@ class GraphModelCharacteristic(CharacteristicFunction):
         masked_cols = [col for col in self.feature_names if col not in coalition_cols]
 
         # Impute masked features
-        if self.masking_strategy == 'permutation':
+        if self.masking_strategy == "permutation":
             # Randomly permute values for masked columns
             for col in masked_cols:
                 X_masked[col] = self.rng.permutation(X_masked[col].values)
@@ -321,7 +327,7 @@ class EnsembleMaskingCharacteristic(CharacteristicFunction):
         y: np.ndarray,
         strategies: list = None,
         metric_fn: Optional[Callable] = None,
-        name: Optional[str] = None
+        name: Optional[str] = None,
     ):
         """
         Initialize ensemble masking characteristic function.
@@ -335,7 +341,7 @@ class EnsembleMaskingCharacteristic(CharacteristicFunction):
             name: Optional name
         """
         super().__init__(name or "EnsembleMasking")
-        self.strategies = strategies or ['zero', 'mean', 'median']
+        self.strategies = strategies or ["zero", "mean", "median"]
 
         # Create a characteristic function for each strategy
         self.char_funcs = [

@@ -21,12 +21,13 @@ from typing import Dict, Optional
 
 try:
     import gnuplot_style as gp
+
     gp.use("all")
 except ImportError:
     print("gnuplot_style not found, using default matplotlib style")
 
 
-def load_benchmark_cache(dataset_name='housing'):
+def load_benchmark_cache(dataset_name="housing"):
     """
     Load unified cache containing all benchmark results.
 
@@ -39,15 +40,17 @@ def load_benchmark_cache(dataset_name='housing'):
     cache_file = f"{dataset_name}_shapley_cache.pkl"
 
     if not os.path.exists(cache_file):
-        raise FileNotFoundError(f"Cache file {cache_file} not found. Run benchmark first.")
+        raise FileNotFoundError(
+            f"Cache file {cache_file} not found. Run benchmark first."
+        )
 
     print(f"Loading unified cache from {cache_file}...")
-    with open(cache_file, 'rb') as f:
+    with open(cache_file, "rb") as f:
         cached_data = pickle.load(f)
 
     # Validate cache contents
-    time_results = cached_data.get('time_results', {})
-    kpi_results = cached_data.get('kpi_results', {})
+    time_results = cached_data.get("time_results", {})
+    kpi_results = cached_data.get("kpi_results", {})
 
     print(f"  Shapley methods: {len(time_results)}")
     print(f"  KPI methods: {len(kpi_results)}")
@@ -67,7 +70,7 @@ def filter_methods(data_dict, exclude_methods=None):
     - Filtered dictionary
     """
     if exclude_methods is None:
-        exclude_methods = ['ImprovedQRCS', 'ImprovedBlockQRCS']
+        exclude_methods = ["ImprovedQRCS", "ImprovedBlockQRCS"]
 
     filtered = {}
     for key, value in data_dict.items():
@@ -84,8 +87,12 @@ def filter_methods(data_dict, exclude_methods=None):
     return filtered
 
 
-def plot_kpi_comparison(results: Dict, filename: str = 'kpi_comparison.png',
-                        metric_name: str = '$R^2$', exclude_methods=None):
+def plot_kpi_comparison(
+    results: Dict,
+    filename: str = "kpi_comparison.png",
+    metric_name: str = "$R^2$",
+    exclude_methods=None,
+):
     """
     Plot KPI comparison from cached results.
 
@@ -103,27 +110,29 @@ def plot_kpi_comparison(results: Dict, filename: str = 'kpi_comparison.png',
     for method, data in results.items():
         label = f'{method} $S$={data["Slope"]:.4f}'
         plt.plot(
-            range(len(data['Metrics'])),
-            data['Metrics'],
+            range(len(data["Metrics"])),
+            data["Metrics"],
             label=label,
             alpha=0.6,
         )
 
-    plt.xlabel('Number of Features Dropped', fontsize=13, fontweight='bold')
-    plt.ylabel(metric_name, fontsize=13, fontweight='bold')
-    plt.title(f'Feature Importance Comparison ({metric_name})',
-              fontsize=14, fontweight='bold')
-    plt.legend(loc='best', fontsize=10, framealpha=0.9)
-    plt.grid(alpha=0.3, linestyle='--')
+    plt.xlabel("Number of Features Dropped", fontsize=13, fontweight="bold")
+    plt.ylabel(metric_name, fontsize=13, fontweight="bold")
+    plt.title(
+        f"Feature Importance Comparison ({metric_name})", fontsize=14, fontweight="bold"
+    )
+    plt.legend(loc="best", fontsize=10, framealpha=0.9)
+    plt.grid(alpha=0.3, linestyle="--")
     plt.tight_layout()
 
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.savefig(filename, dpi=300, bbox_inches="tight")
     print(f"Saved KPI comparison plot to {filename}")
     plt.close()
 
 
-def plot_time_comparison_histogram(time_results: Dict, filename: str = 'time_comparison.png',
-                                   exclude_methods=None):
+def plot_time_comparison_histogram(
+    time_results: Dict, filename: str = "time_comparison.png", exclude_methods=None
+):
     """
     Plot time comparison as a histogram (vertical bars).
 
@@ -147,29 +156,38 @@ def plot_time_comparison_histogram(time_results: Dict, filename: str = 'time_com
     x_pos = np.arange(len(algorithms))
     colors = plt.cm.viridis(np.linspace(0.2, 0.9, len(algorithms)))
 
-    bars = plt.bar(x_pos, times, color=colors, alpha=0.7,
-                   edgecolor='black', linewidth=1.5)
+    bars = plt.bar(
+        x_pos, times, color=colors, alpha=0.7, edgecolor="black", linewidth=1.5
+    )
 
     # Add value labels on top of bars
     for i, (bar, time_val) in enumerate(zip(bars, times)):
-        plt.text(i, time_val, f'{time_val:.2f}s',
-                ha='center', va='bottom', fontweight='bold', fontsize=10)
+        plt.text(
+            i,
+            time_val,
+            f"{time_val:.2f}s",
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+            fontsize=10,
+        )
 
     # Set x-axis labels
-    plt.xticks(x_pos, algorithms, rotation=45, ha='right', fontsize=11)
-    plt.ylabel('Execution Time (seconds)', fontsize=13, fontweight='bold')
-    plt.xlabel('Algorithm', fontsize=13, fontweight='bold')
-    plt.title('Algorithm Execution Time Comparison', fontsize=14, fontweight='bold')
-    plt.grid(axis='y', alpha=0.3, linestyle='--')
+    plt.xticks(x_pos, algorithms, rotation=45, ha="right", fontsize=11)
+    plt.ylabel("Execution Time (seconds)", fontsize=13, fontweight="bold")
+    plt.xlabel("Algorithm", fontsize=13, fontweight="bold")
+    plt.title("Algorithm Execution Time Comparison", fontsize=14, fontweight="bold")
+    plt.grid(axis="y", alpha=0.3, linestyle="--")
     plt.tight_layout()
 
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.savefig(filename, dpi=300, bbox_inches="tight")
     print(f"Saved time comparison histogram to {filename}")
     plt.close()
 
 
-def plot_time_comparison_log_scale(time_results: Dict, filename: str = 'time_comparison_log.png',
-                                   exclude_methods=None):
+def plot_time_comparison_log_scale(
+    time_results: Dict, filename: str = "time_comparison_log.png", exclude_methods=None
+):
     """
     Plot time comparison with log scale (useful when times vary greatly).
 
@@ -192,31 +210,45 @@ def plot_time_comparison_log_scale(time_results: Dict, filename: str = 'time_com
     x_pos = np.arange(len(algorithms))
     colors = plt.cm.plasma(np.linspace(0.2, 0.9, len(algorithms)))
 
-    bars = plt.bar(x_pos, times, color=colors, alpha=0.7,
-                   edgecolor='black', linewidth=1.5)
+    bars = plt.bar(
+        x_pos, times, color=colors, alpha=0.7, edgecolor="black", linewidth=1.5
+    )
 
     # Add value labels
     for i, (bar, time_val) in enumerate(zip(bars, times)):
-        plt.text(i, time_val, f'{time_val:.2f}s',
-                ha='center', va='bottom', fontweight='bold', fontsize=9)
+        plt.text(
+            i,
+            time_val,
+            f"{time_val:.2f}s",
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+            fontsize=9,
+        )
 
-    plt.xticks(x_pos, algorithms, rotation=45, ha='right', fontsize=11)
-    plt.ylabel('Execution Time (seconds, log scale)', fontsize=13, fontweight='bold')
-    plt.xlabel('Algorithm', fontsize=13, fontweight='bold')
-    plt.title('Algorithm Execution Time Comparison (Log Scale)',
-              fontsize=14, fontweight='bold')
-    plt.yscale('log')
-    plt.grid(axis='y', alpha=0.3, linestyle='--', which='both')
+    plt.xticks(x_pos, algorithms, rotation=45, ha="right", fontsize=11)
+    plt.ylabel("Execution Time (seconds, log scale)", fontsize=13, fontweight="bold")
+    plt.xlabel("Algorithm", fontsize=13, fontweight="bold")
+    plt.title(
+        "Algorithm Execution Time Comparison (Log Scale)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    plt.yscale("log")
+    plt.grid(axis="y", alpha=0.3, linestyle="--", which="both")
     plt.tight_layout()
 
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.savefig(filename, dpi=300, bbox_inches="tight")
     print(f"Saved log-scale time comparison to {filename}")
     plt.close()
 
 
-def create_summary_table(time_results: Dict, kpi_results: Dict,
-                        output_file: str = 'benchmark_summary.csv',
-                        exclude_methods=None):
+def create_summary_table(
+    time_results: Dict,
+    kpi_results: Dict,
+    output_file: str = "benchmark_summary.csv",
+    exclude_methods=None,
+):
     """
     Create a summary table with execution times and KPI slopes.
 
@@ -234,18 +266,22 @@ def create_summary_table(time_results: Dict, kpi_results: Dict,
     summary_data = []
     for method in time_results.keys():
         row = {
-            'Algorithm': method,
-            'Execution Time (s)': time_results.get(method, 0),
-            'KPI Slope': kpi_results.get(method, {}).get('Slope', 0) if method in kpi_results else 0
+            "Algorithm": method,
+            "Execution Time (s)": time_results.get(method, 0),
+            "KPI Slope": (
+                kpi_results.get(method, {}).get("Slope", 0)
+                if method in kpi_results
+                else 0
+            ),
         }
         summary_data.append(row)
 
     # Create DataFrame and sort by execution time
     df = pd.DataFrame(summary_data)
-    df = df.sort_values('Execution Time (s)')
+    df = df.sort_values("Execution Time (s)")
 
     # Save to CSV
-    df.to_csv(output_file, index=False, float_format='%.4f')
+    df.to_csv(output_file, index=False, float_format="%.4f")
     print(f"\nSaved summary table to {output_file}")
     print("\nSummary Table:")
     print(df.to_string(index=False))
@@ -262,8 +298,8 @@ def main():
     print("=" * 70)
 
     # Configuration
-    dataset_name = 'housing'
-    exclude_methods = ['ImprovedQRCS', 'ImprovedBlockQRCS']
+    dataset_name = "housing"
+    exclude_methods = ["ImprovedQRCS", "ImprovedBlockQRCS"]
 
     print(f"\nConfiguration:")
     print(f"  Dataset: {dataset_name}")
@@ -276,11 +312,13 @@ def main():
 
     try:
         cached_data = load_benchmark_cache(dataset_name)
-        time_results = cached_data.get('time_results', {})
-        kpi_results = cached_data.get('kpi_results', {})
+        time_results = cached_data.get("time_results", {})
+        kpi_results = cached_data.get("kpi_results", {})
 
         if not kpi_results:
-            print("\nWarning: No KPI results found in cache. Skipping KPI comparison plot.")
+            print(
+                "\nWarning: No KPI results found in cache. Skipping KPI comparison plot."
+            )
 
     except FileNotFoundError as e:
         print(f"\nError: {e}")
@@ -297,9 +335,9 @@ def main():
         print("\n1. Creating KPI comparison plot...")
         plot_kpi_comparison(
             kpi_results,
-            filename=f'{dataset_name}_kpi_comparison.png',
-            metric_name='$R^2$',
-            exclude_methods=exclude_methods
+            filename=f"{dataset_name}_kpi_comparison.png",
+            metric_name="$R^2$",
+            exclude_methods=exclude_methods,
         )
     else:
         print("\n1. Skipping KPI comparison plot (no KPI results)")
@@ -308,16 +346,16 @@ def main():
     print("\n2. Creating time comparison histogram...")
     plot_time_comparison_histogram(
         time_results,
-        filename=f'{dataset_name}_time_histogram.png',
-        exclude_methods=exclude_methods
+        filename=f"{dataset_name}_time_histogram.png",
+        exclude_methods=exclude_methods,
     )
 
     # 3. Time Comparison with Log Scale (optional, useful for large time differences)
     print("\n3. Creating log-scale time comparison...")
     plot_time_comparison_log_scale(
         time_results,
-        filename=f'{dataset_name}_time_histogram_log.png',
-        exclude_methods=exclude_methods
+        filename=f"{dataset_name}_time_histogram_log.png",
+        exclude_methods=exclude_methods,
     )
 
     # 4. Summary Table
@@ -325,8 +363,8 @@ def main():
     create_summary_table(
         time_results,
         kpi_results,
-        output_file=f'{dataset_name}_benchmark_summary.csv',
-        exclude_methods=exclude_methods
+        output_file=f"{dataset_name}_benchmark_summary.csv",
+        exclude_methods=exclude_methods,
     )
 
     print("\n" + "=" * 70)

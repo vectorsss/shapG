@@ -15,7 +15,7 @@ setup(
         "pandas",
         "scipy",
         "scikit-learn",
-        "tabulate"
+        "tabulate",
     ],
     extras_require={
         "dev": [
@@ -26,14 +26,14 @@ setup(
             "isort",
             "flake8",
             "mypy",
-            "pre-commit"
+            "pre-commit",
         ],
     },
     author="Chi Zhao",
     author_email="dandanv5@hotmail.com",
     description="A library to compute Shapley values in graphs.",
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     url="https://github.com/vectorsss/shapG",
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -46,5 +46,5 @@ setup(
         "Topic :: Scientific/Engineering :: Mathematics",
         "Topic :: Scientific/Engineering :: Information Analysis",
     ],
-    python_requires='>=3.8',
+    python_requires=">=3.8",
 )

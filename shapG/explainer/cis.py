@@ -8,7 +8,10 @@ import pandas as pd
 import networkx as nx
 
 from .base import GraphExplainer, CharacteristicFunction
-from ..characteristic.characteristic_functions import CoalitionDegree, CenterOfImputationSet
+from ..characteristic.characteristic_functions import (
+    CoalitionDegree,
+    CenterOfImputationSet,
+)
 from ..utils.graph_construction import GraphBuilder
 
 
@@ -24,7 +27,7 @@ class CISExplainer(GraphExplainer):
         model: Optional[Any] = None,
         characteristic_function: Optional[CharacteristicFunction] = None,
         verbose: bool = False,
-        n_samples: Optional[int] = None
+        n_samples: Optional[int] = None,
     ):
         """Initialize CIS explainer.
 
@@ -38,7 +41,9 @@ class CISExplainer(GraphExplainer):
         self.n_samples = n_samples
         super().__init__(characteristic_function or CoalitionDegree(), verbose)
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'CISExplainer':
+    def fit(
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs
+    ) -> "CISExplainer":
         """Fit the explainer to data.
 
         Args:
@@ -53,8 +58,7 @@ class CISExplainer(GraphExplainer):
         elif isinstance(X, (np.ndarray, pd.DataFrame)):
             if self.model is not None:
                 self.characteristic_function = CenterOfImputationSet(
-                    data=X if isinstance(X, np.ndarray) else X.values,
-                    model=self.model
+                    data=X if isinstance(X, np.ndarray) else X.values, model=self.model
                 )
             builder = GraphBuilder()
             self.graph = builder.from_correlation(X, **kwargs)
@@ -65,9 +69,7 @@ class CISExplainer(GraphExplainer):
         return self
 
     def explain(
-        self,
-        X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
-        **kwargs
+        self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
     ) -> Dict[int, float]:
         """Compute CIS values for all nodes.
 
@@ -91,7 +93,9 @@ class CISExplainer(GraphExplainer):
         n_nodes = len(nodes)
 
         grand_coalition = set(nodes)
-        grand_coalition_value = self.characteristic_function(grand_coalition, self.graph)
+        grand_coalition_value = self.characteristic_function(
+            grand_coalition, self.graph
+        )
 
         individual_values = {}
         for node in nodes:
@@ -102,9 +106,6 @@ class CISExplainer(GraphExplainer):
         surplus = grand_coalition_value - total_individual_value
         equal_share = surplus / n_nodes if n_nodes > 0 else 0
 
-        cis_values = {
-            node: individual_values[node] + equal_share
-            for node in nodes
-        }
+        cis_values = {node: individual_values[node] + equal_share for node in nodes}
 
         return cis_values

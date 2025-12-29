@@ -10,7 +10,12 @@ import itertools
 import random
 
 
-def graph_generator(n_nodes: int, density: float, weight_range: Optional[Tuple[int, int]] = (1, 10), seed: int = 2333) -> nx.Graph:
+def graph_generator(
+    n_nodes: int,
+    density: float,
+    weight_range: Optional[Tuple[int, int]] = (1, 10),
+    seed: int = 2333,
+) -> nx.Graph:
     """Generate a random graph based on the density.
 
     Args:
@@ -30,10 +35,7 @@ def graph_generator(n_nodes: int, density: float, weight_range: Optional[Tuple[i
     if not isinstance(density, (int, float)) or density < 0 or density > 1:
         raise ValueError("density must be between 0 and 1")
     if weight_range is not None:
-        if not (
-            isinstance(weight_range, (tuple, list))
-            and len(weight_range) == 2
-        ):
+        if not (isinstance(weight_range, (tuple, list)) and len(weight_range) == 2):
             raise ValueError("weight_range must be a tuple or list of length 2")
         low, high = weight_range
         if not (isinstance(low, int) and isinstance(high, int)):
@@ -92,4 +94,4 @@ def coalition_degree(G: nx.Graph, S: Union[set, list]) -> float:
         return 0
 
     subgraph = G.subgraph(S)
-    return sum(dict(subgraph.degree(weight='weight')).values()) / 2
+    return sum(dict(subgraph.degree(weight="weight")).values()) / 2

@@ -3,18 +3,19 @@ import numpy as np
 import warnings
 from typing import Dict, Union, Optional, Any
 
+
 def plot(
     shapley_values: Dict[Any, float],
     top_n: int = 10,
-    style: str = 'seaborn-v0_8',
+    style: str = "seaborn-v0_8",
     file_name: Optional[str] = None,
-    title: str = 'Top Shapley Values',
+    title: str = "Top Shapley Values",
     figsize: tuple = (8, 6),
-    color: str = '#1f77b4',
+    color: str = "#1f77b4",
     show_values: bool = True,
-    value_format: str = '{:.2f}',
+    value_format: str = "{:.2f}",
     show_plot: bool = True,
-    feature_names: Optional[Dict[Any, str]] = None
+    feature_names: Optional[Dict[Any, str]] = None,
 ):
     """Plot the Shapley values as a horizontal bar chart.
 
@@ -33,15 +34,19 @@ def plot(
         "The plot function from shapG.visualization is deprecated and will be removed in version 0.15.0. "
         "Please use FeatureImportanceVisualizer or plot_shapley_values instead.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     # Validate input
     if not isinstance(shapley_values, dict):
-        raise TypeError(f"shapley_values must be a dictionary, got {type(shapley_values)}")
+        raise TypeError(
+            f"shapley_values must be a dictionary, got {type(shapley_values)}"
+        )
 
     # Sort values in descending order
-    sorted_values = sorted(shapley_values.items(), key=lambda item: item[1], reverse=True)
+    sorted_values = sorted(
+        shapley_values.items(), key=lambda item: item[1], reverse=True
+    )
 
     # Select top-n values
     if len(sorted_values) > top_n:
@@ -53,7 +58,7 @@ def plot(
     else:
         # Unpack nodes and values
         nodes, values = zip(*sorted_values)
-    
+
     # Convert node labels to strings for display, using feature_names if provided
     if feature_names:
         if isinstance(feature_names, dict):
@@ -66,27 +71,27 @@ def plot(
             node_labels = [str(node) for node in nodes]
     else:
         node_labels = [str(node) for node in nodes]
-    
+
     # Set the plot style
     plt.style.use(style)
-    
+
     # Create figure and axes
     fig, ax = plt.subplots(figsize=figsize)
-    
+
     # Plot horizontal bars
     y_pos = np.arange(len(nodes))
-    bars = ax.barh(y_pos, values, align='center', color=color)
-    
+    bars = ax.barh(y_pos, values, align="center", color=color)
+
     # Configure axes
     ax.set_yticks(y_pos)
     ax.set_yticklabels(node_labels)
     ax.invert_yaxis()  # Display from top to bottom
-    ax.set_xlabel('Shapley Value')
+    ax.set_xlabel("Shapley Value")
     ax.set_title(title)
-    
+
     # Add grid lines for readability
-    ax.grid(axis='x', linestyle='--', alpha=0.7)
-    
+    ax.grid(axis="x", linestyle="--", alpha=0.7)
+
     # Display values next to bars
     if show_values and values:  # Only if there are values to show
         # Determine appropriate offset based on max value
@@ -97,11 +102,11 @@ def plot(
             value = values[i]
             ax.text(
                 value + offset,
-                bar.get_y() + bar.get_height()/2,
+                bar.get_y() + bar.get_height() / 2,
                 value_format.format(value),
-                va='center'
+                va="center",
             )
-    
+
     # Save to file if specified
     if file_name is not None:
         plt.savefig(file_name, dpi=300)
@@ -110,7 +115,8 @@ def plot(
     # return fig, ax for further customization
     return fig, ax
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     shapley_values = {
         0: 0.1,
         1: 0.2,
@@ -125,10 +131,10 @@ if __name__ == '__main__':
     }
     fig, ax = plot(shapley_values, show_plot=False)
     ax.set_xlabel("Nodes Importance", fontsize=14)  # Change x-axis label
-    ax.set_ylabel("Nodes", fontsize=14)               # Add/change y-axis label
-    ax.spines['top'].set_visible(False)               # Remove top border
-    ax.spines['right'].set_visible(False)             # Remove right border
-    ax.set_title('Top 10 Shapley Values', fontsize=16)    # Change title font size
+    ax.set_ylabel("Nodes", fontsize=14)  # Add/change y-axis label
+    ax.spines["top"].set_visible(False)  # Remove top border
+    ax.spines["right"].set_visible(False)  # Remove right border
+    ax.set_title("Top 10 Shapley Values", fontsize=16)  # Change title font size
     # show the plot
     plt.tight_layout()
     plt.show()

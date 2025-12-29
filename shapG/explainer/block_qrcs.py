@@ -14,8 +14,10 @@ import warnings
 from scipy.linalg import qr
 from scipy.optimize import minimize
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 try:
     import cvxpy as cp
+
     CVXPY_AVAILABLE = True
 except ImportError:
     CVXPY_AVAILABLE = False
@@ -58,7 +60,7 @@ class BlockQRCSExplainer(Explainer):
         use_fast_fallback: bool = False,
         parallel: bool = True,
         max_workers: Optional[int] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """Initialize Block QR-CS explainer.
 
@@ -95,7 +97,7 @@ class BlockQRCSExplainer(Explainer):
     def _parse_input(
         self,
         X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
-        context: Optional[Any] = None
+        context: Optional[Any] = None,
     ) -> Tuple[int, List, Any]:
         """Parse input to extract player count, identifiers, and context.
 
@@ -150,8 +152,8 @@ class BlockQRCSExplainer(Explainer):
         self,
         X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
         context: Optional[Any] = None,
-        **kwargs
-    ) -> 'BlockQRCSExplainer':
+        **kwargs,
+    ) -> "BlockQRCSExplainer":
         """Fit the explainer to data.
 
         Args:
@@ -171,7 +173,7 @@ class BlockQRCSExplainer(Explainer):
         self.n, self.player_ids, self._context = self._parse_input(X, context)
 
         # Compute total coalition space size
-        self.m_total = min(2**(self.n - 1), 5000)  # Cap for memory
+        self.m_total = min(2 ** (self.n - 1), 5000)  # Cap for memory
 
         # Precompute global per-index weights aligned with coalition indexing
         self.weights_full = self._compute_global_weights()
@@ -188,8 +190,9 @@ class BlockQRCSExplainer(Explainer):
         if self.block_sizes is None:
             base_size = self.m_total // self.n_blocks
             remainder = self.m_total % self.n_blocks
-            self.block_sizes = [base_size + (1 if i < remainder else 0)
-                               for i in range(self.n_blocks)]
+            self.block_sizes = [
+                base_size + (1 if i < remainder else 0) for i in range(self.n_blocks)
+            ]
 
         # Compute measurements per block if not provided
         if self.n_measurements_per_block is None:
@@ -210,7 +213,9 @@ class BlockQRCSExplainer(Explainer):
             for i, (size, n_meas, (start, end)) in enumerate(
                 zip(self.block_sizes, self.n_measurements_per_block, self.block_ranges)
             ):
-                print(f"  Block {i}: size={size}, measurements={n_meas}, range=[{start}:{end})")
+                print(
+                    f"  Block {i}: size={size}, measurements={n_meas}, range=[{start}:{end})"
+                )
 
     def _compute_global_weights(self) -> np.ndarray:
         """Compute Shapley weights per global coalition index via popcount."""
@@ -227,7 +232,7 @@ class BlockQRCSExplainer(Explainer):
         self,
         X: Optional[Union[int, np.ndarray, pd.DataFrame, nx.Graph, List]] = None,
         context: Optional[Any] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict:
         """Compute Block QR-CS Shapley values.
 
@@ -253,7 +258,9 @@ class BlockQRCSExplainer(Explainer):
         shapley_indices = self._compute_shapley_blocks(utility_wrapper)
 
         # Map back to player identifiers
-        shapley_values = {self.player_ids[i]: value for i, value in shapley_indices.items()}
+        shapley_values = {
+            self.player_ids[i]: value for i, value in shapley_indices.items()
+        }
 
         return shapley_values
 
@@ -282,9 +289,7 @@ class BlockQRCSExplainer(Explainer):
             # Submit all block computations
             future_to_block = {
                 executor.submit(
-                    self._compute_single_block,
-                    block_idx,
-                    utility_func
+                    self._compute_single_block, block_idx, utility_func
                 ): block_idx
                 for block_idx in range(self.n_blocks)
             }
@@ -339,7 +344,7 @@ class BlockQRCSExplainer(Explainer):
         self,
         block_idx: int,
         utility_func: Callable,
-        use_fast_override: Optional[bool] = None
+        use_fast_override: Optional[bool] = None,
     ) -> Dict[int, float]:
         """Compute Shapley values for a single block.
 
@@ -367,7 +372,9 @@ class BlockQRCSExplainer(Explainer):
         shapley_values = {}
 
         # Allow callers (e.g. subclasses) to override the fast-fallback choice per block
-        use_fast = self.use_fast_fallback if use_fast_override is None else use_fast_override
+        use_fast = (
+            self.use_fast_fallback if use_fast_override is None else use_fast_override
+        )
 
         for player in range(self.n):
             # Measure marginal contributions for selected coalitions in this block
@@ -394,18 +401,21 @@ class BlockQRCSExplainer(Explainer):
                     u_hat = Psi @ Q_from_V @ s_hat
 
                     # Compute Shapley value as weighted sum for this block
-                    shapley_values[player] = np.dot(weights[:len(u_hat)], u_hat)
+                    shapley_values[player] = np.dot(weights[: len(u_hat)], u_hat)
 
                 except Exception as e:
                     import warnings
+
                     warnings.warn(
                         f"Block QR-CS reconstruction failed for block {block_idx}, player {player}: {str(e)}. "
                         f"Falling back to mean of measured contributions. "
                         f"Consider installing cvxpy for better results: pip install cvxpy",
-                        RuntimeWarning
+                        RuntimeWarning,
                     )
                     if self.verbose:
-                        print(f"    Block {block_idx}, player {player} reconstruction failed: {e}")
+                        print(
+                            f"    Block {block_idx}, player {player} reconstruction failed: {e}"
+                        )
                     shapley_values[player] = np.mean(y) if len(y) > 0 else 0
 
         return shapley_values
@@ -423,20 +433,19 @@ class BlockQRCSExplainer(Explainer):
         for k in range(block_size):
             for n in range(block_size):
                 if k == 0:
-                    Psi[n, k] = np.sqrt(1/block_size)
+                    Psi[n, k] = np.sqrt(1 / block_size)
                 else:
-                    Psi[n, k] = np.sqrt(2/block_size) * np.cos(np.pi * k * (n + 0.5) / block_size)
+                    Psi[n, k] = np.sqrt(2 / block_size) * np.cos(
+                        np.pi * k * (n + 0.5) / block_size
+                    )
         return Psi
 
     def _compute_block_measurement_matrix(
-        self,
-        Psi: np.ndarray,
-        n_measurements: int,
-        block_size: int
+        self, Psi: np.ndarray, n_measurements: int, block_size: int
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Compute measurement matrix for this block using QR decomposition and return Q from QR(V)."""
         V = Psi.T
-        Q, R, P = qr(V, pivoting=True, mode='economic' if block_size > 100 else 'full')
+        Q, R, P = qr(V, pivoting=True, mode="economic" if block_size > 100 else "full")
 
         # Select first n_measurements pivoted indices
         selected_indices = P[:n_measurements]
@@ -457,8 +466,8 @@ class BlockQRCSExplainer(Explainer):
         # This avoids overflow for large coalition indices (> 2^31)
         idx = int(idx)
 
-        if idx >= 2**(self.n - 1):
-            idx = idx % 2**(self.n - 1)
+        if idx >= 2 ** (self.n - 1):
+            idx = idx % 2 ** (self.n - 1)
 
         for i, p in enumerate(available_players):
             # Bit shift with Python int (arbitrary precision)
@@ -479,19 +488,19 @@ class BlockQRCSExplainer(Explainer):
                 prob = cp.Problem(objective, constraints)
                 prob.solve()
 
-                if prob.status in ['optimal', 'optimal_inaccurate']:
+                if prob.status in ["optimal", "optimal_inaccurate"]:
                     return x.value
                 else:
                     warnings.warn(
                         f"CVXPY L1 minimization failed with status: {prob.status}. "
                         f"Falling back to least squares approximation.",
-                        RuntimeWarning
+                        RuntimeWarning,
                     )
                     return np.linalg.lstsq(A, b, rcond=None)[0]
             except Exception as e:
                 warnings.warn(
                     f"CVXPY solver failed: {e}. Falling back to least squares approximation.",
-                    RuntimeWarning
+                    RuntimeWarning,
                 )
                 try:
                     return np.linalg.lstsq(A, b, rcond=None)[0]
@@ -510,14 +519,16 @@ class BlockQRCSExplainer(Explainer):
             def constraint(x):
                 return self.tolerance - np.linalg.norm(A @ x - b)
 
-            constraints = {'type': 'ineq', 'fun': constraint}
+            constraints = {"type": "ineq", "fun": constraint}
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 result = minimize(
-                    objective, x0, method='SLSQP',
+                    objective,
+                    x0,
+                    method="SLSQP",
                     constraints=constraints,
-                    options={'maxiter': 100, 'ftol': 1e-6}
+                    options={"maxiter": 100, "ftol": 1e-6},
                 )
 
             return result.x if result.success else x0

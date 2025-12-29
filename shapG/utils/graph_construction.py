@@ -17,9 +17,7 @@ class GraphBuilder:
 
     @staticmethod
     def from_kendalltau_minimal_edge(
-        data: Union[np.ndarray, pd.DataFrame],
-        reverse: bool = True,
-        version: str = 'v3'
+        data: Union[np.ndarray, pd.DataFrame], reverse: bool = True, version: str = "v3"
     ) -> nx.Graph:
         """Build graph using the original ShapG method: kendalltau + minimal edge graph.
 
@@ -53,8 +51,8 @@ class GraphBuilder:
     def from_matrix_generator(
         data: Union[np.ndarray, pd.DataFrame],
         method: Optional[Callable] = None,
-        create_graph_method: str = 'minimal_edge',
-        **kwargs
+        create_graph_method: str = "minimal_edge",
+        **kwargs,
     ) -> nx.Graph:
         """Build graph using matrix_generator with custom method.
 
@@ -83,16 +81,20 @@ class GraphBuilder:
             W = matrix_generator(data, method)
 
         # Create graph based on method
-        if create_graph_method == 'minimal_edge':
-            reverse = kwargs.get('reverse', True)
-            version = kwargs.get('version', 'v3')
+        if create_graph_method == "minimal_edge":
+            reverse = kwargs.get("reverse", True)
+            version = kwargs.get("version", "v3")
             A, _ = create_minimal_edge_graph(W, reverse=reverse, version=version)
             G = nx.Graph(A)
-        elif create_graph_method == 'threshold':
-            threshold = kwargs.get('threshold', 0.3)
+        elif create_graph_method == "threshold":
+            threshold = kwargs.get("threshold", 0.3)
             A = (W.abs() >= threshold).astype(int)
-            np.fill_diagonal(A.values if hasattr(A, 'values') else A, 0)
-            G = nx.from_pandas_adjacency(A) if isinstance(A, pd.DataFrame) else nx.from_numpy_array(A)
+            np.fill_diagonal(A.values if hasattr(A, "values") else A, 0)
+            G = (
+                nx.from_pandas_adjacency(A)
+                if isinstance(A, pd.DataFrame)
+                else nx.from_numpy_array(A)
+            )
         else:
             raise ValueError(f"Unknown graph creation method: {create_graph_method}")
 
@@ -102,7 +104,7 @@ class GraphBuilder:
     def from_correlation(
         data: Union[np.ndarray, pd.DataFrame],
         threshold: float = 0.3,
-        method: str = 'pearson'
+        method: str = "pearson",
     ) -> nx.Graph:
         """Build graph from correlation matrix.
 
@@ -139,7 +141,7 @@ class GraphBuilder:
         X: Union[np.ndarray, pd.DataFrame],
         y: Optional[np.ndarray] = None,
         threshold: float = 0.1,
-        n_neighbors: int = 3
+        n_neighbors: int = 3,
     ) -> nx.Graph:
         """Build graph from mutual information.
 
@@ -181,7 +183,7 @@ class GraphBuilder:
                     mi = mutual_info_regression(
                         X_array[:, i].reshape(-1, 1),
                         X_array[:, j],
-                        n_neighbors=n_neighbors
+                        n_neighbors=n_neighbors,
                     )[0]
                     if mi >= threshold:
                         G.add_edge(node_labels[i], node_labels[j], weight=mi)
@@ -192,7 +194,7 @@ class GraphBuilder:
     def from_adjacency(
         adj_matrix: Union[np.ndarray, pd.DataFrame],
         weighted: bool = True,
-        node_labels: Optional[List[str]] = None
+        node_labels: Optional[List[str]] = None,
     ) -> nx.Graph:
         """Build graph from adjacency matrix.
 
@@ -215,7 +217,9 @@ class GraphBuilder:
         # Apply node labels if provided
         if node_labels is not None:
             if len(node_labels) != G.number_of_nodes():
-                raise ValueError(f"Number of labels ({len(node_labels)}) must match number of nodes ({G.number_of_nodes()})")
+                raise ValueError(
+                    f"Number of labels ({len(node_labels)}) must match number of nodes ({G.number_of_nodes()})"
+                )
 
             # Create mapping from integers to labels
             mapping = {i: label for i, label in enumerate(node_labels)}
@@ -228,7 +232,7 @@ class GraphBuilder:
         n_nodes: int,
         density: float = 0.3,
         weight_range: Tuple[float, float] = (0.1, 1.0),
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
     ) -> nx.Graph:
         """Generate random graph.
 
@@ -266,12 +270,12 @@ class GraphBuilder:
         X: Union[np.ndarray, pd.DataFrame],
         y: np.ndarray,
         density_ratio: Optional[float] = None,
-        correlation_method: str = 'cosine',
-        similarity_method: str = 'cosine',
+        correlation_method: str = "cosine",
+        similarity_method: str = "cosine",
         feature_ranges: Optional[Dict[str, Tuple[int, int]]] = None,
         use_mixed_similarity: bool = False,
         use_target_aware: bool = False,
-        enforce_cross_type_edges: bool = False
+        enforce_cross_type_edges: bool = False,
     ) -> nx.Graph:
         """Construct graph by selectively removing edges based on feature ranking.
 
@@ -321,21 +325,30 @@ class GraphBuilder:
                 for j in range(i + 1, n_features):
                     sim = 0
                     for class_val in np.unique(y):
-                        mask = (y == class_val).ravel() if y.ndim > 1 else (y == class_val)
+                        mask = (
+                            (y == class_val).ravel() if y.ndim > 1 else (y == class_val)
+                        )
                         if np.sum(mask) > 1:
                             X_class = X_array[mask]
                             try:
                                 if feature_ranges and use_mixed_similarity:
                                     # Determine feature types
-                                    type_i = GraphBuilder._get_feature_type(i, feature_ranges)
-                                    type_j = GraphBuilder._get_feature_type(j, feature_ranges)
+                                    type_i = GraphBuilder._get_feature_type(
+                                        i, feature_ranges
+                                    )
+                                    type_j = GraphBuilder._get_feature_type(
+                                        j, feature_ranges
+                                    )
 
-                                    if type_i == 'num' and type_j == 'num':
+                                    if type_i == "num" and type_j == "num":
                                         corr, _ = pearsonr(X_class[:, i], X_class[:, j])
                                         sim += abs(corr) * (np.sum(mask) / len(y))
                                     else:
                                         # For categorical/binary, use normalized mutual information
-                                        from sklearn.metrics import normalized_mutual_info_score
+                                        from sklearn.metrics import (
+                                            normalized_mutual_info_score,
+                                        )
+
                                         sim += normalized_mutual_info_score(
                                             X_class[:, i], X_class[:, j]
                                         ) * (np.sum(mask) / len(y))
@@ -387,7 +400,9 @@ class GraphBuilder:
                 weight = similarity_matrix[i, j]
                 edges.append((features[i], features[j], weight))
                 # Track cross-type edges
-                if GraphBuilder._is_cross_type_edge(i, j, feature_ranges, enforce_cross_type_edges):
+                if GraphBuilder._is_cross_type_edge(
+                    i, j, feature_ranges, enforce_cross_type_edges
+                ):
                     cross_type_edges.add((features[i], features[j]))
                     cross_type_edges.add((features[j], features[i]))
 
@@ -413,7 +428,9 @@ class GraphBuilder:
         target_edges = int(density_ratio * max_edges)
 
         # If enforcing cross-type edges, count them separately
-        num_cross_type_edges = len(cross_type_edges) // 2 if enforce_cross_type_edges else 0
+        num_cross_type_edges = (
+            len(cross_type_edges) // 2 if enforce_cross_type_edges else 0
+        )
         if num_cross_type_edges > 0:
             logger.info(
                 f"Enforcing {num_cross_type_edges} cross-type edges between numerical and categorical/binary features"
@@ -445,7 +462,7 @@ class GraphBuilder:
 
             # Get edges of current node sorted by weight (descending)
             node_edges = [(u, v) for u, v in G.edges(node)]
-            node_edges.sort(key=lambda x: G[x[0]][x[1]]['weight'], reverse=True)
+            node_edges.sort(key=lambda x: G[x[0]][x[1]]["weight"], reverse=True)
 
             for edge in node_edges:
                 if G.number_of_edges() <= target_edges:
@@ -458,7 +475,7 @@ class GraphBuilder:
                     continue
 
                 # Try removing edge
-                weight = G[edge[0]][edge[1]]['weight']
+                weight = G[edge[0]][edge[1]]["weight"]
                 G.remove_edge(*edge)
 
                 # Check connectivity
@@ -469,58 +486,71 @@ class GraphBuilder:
                     G.add_edge(*edge, weight=weight)
 
         # Add metadata about the actual density used
-        G.graph['actual_density_ratio'] = actual_density_ratio
+        G.graph["actual_density_ratio"] = actual_density_ratio
 
         return G
 
     @staticmethod
-    def _get_feature_type(idx: int, feature_ranges: Optional[Dict[str, Tuple[int, int]]]) -> str:
+    def _get_feature_type(
+        idx: int, feature_ranges: Optional[Dict[str, Tuple[int, int]]]
+    ) -> str:
         """Determine feature type from feature ranges."""
         if feature_ranges:
-            if 'num' in feature_ranges and feature_ranges['num'][0] <= idx < feature_ranges['num'][1]:
-                return 'num'
-            elif 'cat' in feature_ranges and feature_ranges['cat'][0] <= idx < feature_ranges['cat'][1]:
-                return 'cat'
-            elif 'bin' in feature_ranges and feature_ranges['bin'][0] <= idx < feature_ranges['bin'][1]:
-                return 'bin'
-        return 'unknown'
+            if (
+                "num" in feature_ranges
+                and feature_ranges["num"][0] <= idx < feature_ranges["num"][1]
+            ):
+                return "num"
+            elif (
+                "cat" in feature_ranges
+                and feature_ranges["cat"][0] <= idx < feature_ranges["cat"][1]
+            ):
+                return "cat"
+            elif (
+                "bin" in feature_ranges
+                and feature_ranges["bin"][0] <= idx < feature_ranges["bin"][1]
+            ):
+                return "bin"
+        return "unknown"
 
     @staticmethod
     def _is_cross_type_edge(
         i: int,
         j: int,
         feature_ranges: Optional[Dict[str, Tuple[int, int]]],
-        enforce_cross_type_edges: bool
+        enforce_cross_type_edges: bool,
     ) -> bool:
         """Check if edge is cross-type (between numerical and categorical/binary)."""
         if not enforce_cross_type_edges or not feature_ranges:
             return False
         type_i = GraphBuilder._get_feature_type(i, feature_ranges)
         type_j = GraphBuilder._get_feature_type(j, feature_ranges)
-        return (type_i == 'num' and type_j in ['cat', 'bin']) or \
-               (type_j == 'num' and type_i in ['cat', 'bin'])
+        return (type_i == "num" and type_j in ["cat", "bin"]) or (
+            type_j == "num" and type_i in ["cat", "bin"]
+        )
 
     @staticmethod
     def _get_feature_rank(
-        X: Union[np.ndarray, pd.DataFrame],
-        y: np.ndarray,
-        method: str = 'cosine'
+        X: Union[np.ndarray, pd.DataFrame], y: np.ndarray, method: str = "cosine"
     ) -> List[int]:
         """Get feature ranking based on correlation with target."""
         method_map = {
-            'pearsonr': pearsonr,
-            'kendalltau': kendalltau,
-            'spearmanr': spearmanr,
-            'cosine': lambda x, y: 1 - cosine(x, y),
-            'mutual_info': None,
+            "pearsonr": pearsonr,
+            "kendalltau": kendalltau,
+            "spearmanr": spearmanr,
+            "cosine": lambda x, y: 1 - cosine(x, y),
+            "mutual_info": None,
         }
 
         if method not in method_map:
             raise ValueError(f"Method {method} not supported")
 
         # Handle mutual information separately
-        if method == 'mutual_info':
-            from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+        if method == "mutual_info":
+            from sklearn.feature_selection import (
+                mutual_info_classif,
+                mutual_info_regression,
+            )
 
             is_classification = len(np.unique(y)) < 10
 
@@ -532,12 +562,14 @@ class GraphBuilder:
             if is_classification:
                 mi_scores = mutual_info_classif(X_array, y.ravel() if y.ndim > 1 else y)
             else:
-                mi_scores = mutual_info_regression(X_array, y.ravel() if y.ndim > 1 else y)
+                mi_scores = mutual_info_regression(
+                    X_array, y.ravel() if y.ndim > 1 else y
+                )
 
             return np.argsort(mi_scores)[::-1].tolist()
 
         correlation_func = method_map[method]
-        use_pvalue = method in ['pearsonr', 'kendalltau', 'spearmanr']
+        use_pvalue = method in ["pearsonr", "kendalltau", "spearmanr"]
 
         values = {}
         if isinstance(X, pd.DataFrame):
@@ -560,13 +592,16 @@ class GraphBuilder:
             return sorted(values, key=values.get, reverse=use_pvalue)
 
     @staticmethod
-    def _calculate_similarity_matrix(X_array: np.ndarray, method: str = 'cosine') -> np.ndarray:
+    def _calculate_similarity_matrix(
+        X_array: np.ndarray, method: str = "cosine"
+    ) -> np.ndarray:
         """Calculate similarity matrix between features."""
         n_features = X_array.shape[1]
         similarity_matrix = np.zeros((n_features, n_features))
 
-        if method == 'mutual_info':
+        if method == "mutual_info":
             from sklearn.metrics import normalized_mutual_info_score
+
             for i in range(n_features):
                 for j in range(i + 1, n_features):
                     nmi = normalized_mutual_info_score(X_array[:, i], X_array[:, j])
@@ -575,11 +610,11 @@ class GraphBuilder:
         else:
             for i in range(n_features):
                 for j in range(i + 1, n_features):
-                    if method in ['pearsonr', 'kendalltau', 'spearmanr']:
+                    if method in ["pearsonr", "kendalltau", "spearmanr"]:
                         corr, _ = eval(method)(X_array[:, i], X_array[:, j])
                         similarity_matrix[i, j] = abs(corr)
                         similarity_matrix[j, i] = abs(corr)
-                    elif method == 'cosine':
+                    elif method == "cosine":
                         sim = 1 - cosine(X_array[:, i], X_array[:, j])
                         similarity_matrix[i, j] = abs(sim)
                         similarity_matrix[j, i] = abs(sim)
@@ -604,7 +639,7 @@ class CoalitionManager:
         graph_or_nodes: Union[nx.Graph, Set[int], int],
         nodes: Optional[Union[Set[int], int]] = None,
         depth: int = 1,
-        include_self: bool = False
+        include_self: bool = False,
     ) -> Set[int]:
         """Get coalition of neighbors up to specified depth.
 
@@ -624,11 +659,13 @@ class CoalitionManager:
             target_nodes = nodes
         else:
             # Called as: get_neighbors_coalition(nodes, depth=1) - use instance graph
-            if hasattr(self, 'graph') and self.graph is not None:
+            if hasattr(self, "graph") and self.graph is not None:
                 graph = self.graph
                 target_nodes = graph_or_nodes
             else:
-                raise ValueError("Graph not available - either pass graph as argument or set instance graph")
+                raise ValueError(
+                    "Graph not available - either pass graph as argument or set instance graph"
+                )
 
         if graph is None:
             raise ValueError("Graph not available")
@@ -667,9 +704,7 @@ class CoalitionManager:
     # Add static method support by monkey patching after class definition
 
     def get_all_coalitions(
-        self,
-        nodes: Optional[List[int]] = None,
-        max_size: Optional[int] = None
+        self, nodes: Optional[List[int]] = None, max_size: Optional[int] = None
     ) -> List[Set[int]]:
         """Generate all possible coalitions.
 
@@ -701,10 +736,10 @@ class CoalitionManager:
         self,
         graph_or_node: Union[nx.Graph, int],
         n_samples: int = 100,
-        strategy: str = 'uniform',
+        strategy: str = "uniform",
         coalition_set: Optional[Set[int]] = None,
         seed: Optional[int] = None,
-        coalition_sizes: Optional[List[int]] = None
+        coalition_sizes: Optional[List[int]] = None,
     ) -> List[Set[int]]:
         """Sample coalitions.
 
@@ -743,7 +778,7 @@ class CoalitionManager:
         n_features = len(coalition_list)
         samples = []
 
-        if strategy == 'uniform':
+        if strategy == "uniform":
             # Uniform random sampling
             if coalition_sizes is not None:
                 # Sample specific sizes
@@ -765,7 +800,7 @@ class CoalitionManager:
                     else:
                         samples.append(set())
 
-        elif strategy == 'weighted':
+        elif strategy == "weighted":
             # Weight by distance from node
             if self.graph is None:
                 raise ValueError("Graph required for weighted sampling")
@@ -776,23 +811,22 @@ class CoalitionManager:
             except:
                 distances = {n: 1 for n in coalition_list}
 
-            weights = np.array([1.0 / (distances.get(n, n_features) + 1) for n in coalition_list])
+            weights = np.array(
+                [1.0 / (distances.get(n, n_features) + 1) for n in coalition_list]
+            )
             weights /= weights.sum()
 
             for _ in range(n_samples):
                 size = np.random.randint(0, n_features + 1)
                 if size > 0:
                     selected = np.random.choice(
-                        coalition_list,
-                        size,
-                        replace=False,
-                        p=weights
+                        coalition_list, size, replace=False, p=weights
                     )
                     samples.append(set(selected))
                 else:
                     samples.append(set())
 
-        elif strategy == 'stratified':
+        elif strategy == "stratified":
             # Stratified by coalition size
             sizes = list(range(n_features + 1))
             samples_per_size = n_samples // len(sizes)
@@ -829,7 +863,9 @@ def _wrapped_get_neighbors_coalition(self_or_graph, *args, **kwargs):
         # Static method call: CoalitionManager.get_neighbors_coalition(graph, nodes, ...)
         # Create temporary instance and call the method
         temp_manager = CoalitionManager()
-        return _original_get_neighbors_coalition(temp_manager, self_or_graph, *args, **kwargs)
+        return _original_get_neighbors_coalition(
+            temp_manager, self_or_graph, *args, **kwargs
+        )
 
 
 def _wrapped_sample_coalitions(self_or_graph, *args, **kwargs):

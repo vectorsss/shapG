@@ -32,11 +32,11 @@ class ShapGExplainer(GraphExplainer):
         characteristic_function: Optional[CharacteristicFunction] = None,
         depth: int = 1,
         n_samples: int = 15,
-        sampling_strategy: str = 'uniform',
+        sampling_strategy: str = "uniform",
         approximate_by_ratio: bool = True,
         scale: bool = True,
         verbose: bool = False,
-        cache_size: int = 2**15
+        cache_size: int = 2**15,
     ):
         """Initialize ShapG explainer.
 
@@ -78,7 +78,9 @@ class ShapGExplainer(GraphExplainer):
             raise ValueError(f"Number of samples must be positive, got {value}")
         self.m = value
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'ShapGExplainer':
+    def fit(
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs
+    ) -> "ShapGExplainer":
         """Fit the explainer to data.
 
         Args:
@@ -99,15 +101,19 @@ class ShapGExplainer(GraphExplainer):
         self._fitted = True
         return self
 
-    def _create_cached_characteristic_function(self) -> Callable[[Tuple[int, ...]], float]:
+    def _create_cached_characteristic_function(
+        self,
+    ) -> Callable[[Tuple[int, ...]], float]:
         """Create a cached version of the characteristic function.
 
         Returns:
             Cached characteristic function
         """
+
         @lru_cache(maxsize=self.cache_size)
         def cached_f(coalition_tuple):
             return self.characteristic_function(set(coalition_tuple), self.graph)
+
         return cached_f
 
     def _get_reachable_nodes(self, node: int) -> Set[int]:
@@ -128,7 +134,7 @@ class ShapGExplainer(GraphExplainer):
         self,
         node: int,
         reachable_nodes: Set[int],
-        cached_f: Callable[[Tuple[int, ...]], float]
+        cached_f: Callable[[Tuple[int, ...]], float],
     ) -> float:
         """Compute exact Shapley value for small coalitions.
 
@@ -148,9 +154,7 @@ class ShapGExplainer(GraphExplainer):
                 S_tuple = tuple(sorted(S))
                 S_with_node_tuple = tuple(sorted(S + (node,)))
 
-                marginal_contribution = (
-                    cached_f(S_with_node_tuple) - cached_f(S_tuple)
-                )
+                marginal_contribution = cached_f(S_with_node_tuple) - cached_f(S_tuple)
                 shapley_value += marginal_contribution
 
         return shapley_value * coeff
@@ -164,10 +168,13 @@ class ShapGExplainer(GraphExplainer):
         Returns:
             Number of samples to take
         """
-        return ceil(n_reachable / self.m *
-                   (log2(n_reachable) + EULER_MASCHERONI_CONSTANT))
+        return ceil(
+            n_reachable / self.m * (log2(n_reachable) + EULER_MASCHERONI_CONSTANT)
+        )
 
-    def _calculate_sampling_coefficient(self, n_reachable: int, sample_nums: int) -> float:
+    def _calculate_sampling_coefficient(
+        self, n_reachable: int, sample_nums: int
+    ) -> float:
         """Calculate the coefficient for sampling-based approximation.
 
         Args:
@@ -177,9 +184,9 @@ class ShapGExplainer(GraphExplainer):
         Returns:
             Coefficient for scaling
         """
-        coeff = 1 / 2 ** self.m / sample_nums
+        coeff = 1 / 2**self.m / sample_nums
         if self.scale:
-            coeff *= ((n_reachable + 1) / (self.m + 1))
+            coeff *= (n_reachable + 1) / (self.m + 1)
         return coeff
 
     def _compute_sampled_marginal_contributions(
@@ -187,7 +194,7 @@ class ShapGExplainer(GraphExplainer):
         node: int,
         reachable_nodes_list: List[int],
         sample_nums: int,
-        cached_f: Callable[[Tuple[int, ...]], float]
+        cached_f: Callable[[Tuple[int, ...]], float],
     ) -> float:
         """Compute marginal contributions using sampling.
 
@@ -203,19 +210,22 @@ class ShapGExplainer(GraphExplainer):
         total_contribution = 0.0
 
         for _ in range(sample_nums):
-            reachable_nodes_sampled = set(random.sample(
-                reachable_nodes_list,
-                min(self.m, len(reachable_nodes_list))
-            ))
+            reachable_nodes_sampled = set(
+                random.sample(
+                    reachable_nodes_list, min(self.m, len(reachable_nodes_list))
+                )
+            )
             reachable_nodes_sampled.add(node)
 
             for S_size in range(len(reachable_nodes_sampled)):
-                for S in itertools.combinations(reachable_nodes_sampled - {node}, S_size):
+                for S in itertools.combinations(
+                    reachable_nodes_sampled - {node}, S_size
+                ):
                     S_tuple = tuple(sorted(S))
                     S_with_node_tuple = tuple(sorted(S + (node,)))
 
-                    marginal_contribution = (
-                        cached_f(S_with_node_tuple) - cached_f(S_tuple)
+                    marginal_contribution = cached_f(S_with_node_tuple) - cached_f(
+                        S_tuple
                     )
                     total_contribution += marginal_contribution
 
@@ -225,7 +235,7 @@ class ShapGExplainer(GraphExplainer):
         self,
         node: int,
         reachable_nodes: Set[int],
-        cached_f: Callable[[Tuple[int, ...]], float]
+        cached_f: Callable[[Tuple[int, ...]], float],
     ) -> float:
         """Compute approximate Shapley value for large coalitions using sampling.
 
@@ -247,7 +257,9 @@ class ShapGExplainer(GraphExplainer):
 
         return total_contribution * coeff
 
-    def _compute_node_shapley_value(self, node: int, cached_f: Callable[[Tuple[int, ...]], float]) -> float:
+    def _compute_node_shapley_value(
+        self, node: int, cached_f: Callable[[Tuple[int, ...]], float]
+    ) -> float:
         """Compute Shapley value for a single node.
 
         Args:
@@ -272,9 +284,7 @@ class ShapGExplainer(GraphExplainer):
             )
 
     def _apply_ratio_approximation(
-        self,
-        shapley_values: Dict[int, float],
-        full_coalition_value: float
+        self, shapley_values: Dict[int, float], full_coalition_value: float
     ) -> Dict[int, float]:
         """Apply ratio-based approximation to scale Shapley values.
 
@@ -292,9 +302,7 @@ class ShapGExplainer(GraphExplainer):
         return shapley_values
 
     def explain(
-        self,
-        X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
-        **kwargs
+        self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
     ) -> Dict[int, float]:
         """Compute approximate Shapley values using original ShapG algorithm.
 
@@ -319,13 +327,19 @@ class ShapGExplainer(GraphExplainer):
         full_coalition_value = None
         if self.approximate_by_ratio:
             full_coalition = set(self.graph.nodes())
-            full_coalition_value = self.characteristic_function(full_coalition, self.graph)
+            full_coalition_value = self.characteristic_function(
+                full_coalition, self.graph
+            )
 
         # Create cached characteristic function
         cached_f = self._create_cached_characteristic_function()
 
         # Setup progress iterator
-        node_iterator = tqdm(self.graph.nodes(), desc="Computing ShapG values") if self.verbose else self.graph.nodes()
+        node_iterator = (
+            tqdm(self.graph.nodes(), desc="Computing ShapG values")
+            if self.verbose
+            else self.graph.nodes()
+        )
 
         # Compute Shapley values for each node
         for node in node_iterator:
@@ -333,6 +347,8 @@ class ShapGExplainer(GraphExplainer):
 
         # Apply ratio approximation if requested
         if self.approximate_by_ratio and full_coalition_value is not None:
-            shapley_values = self._apply_ratio_approximation(shapley_values, full_coalition_value)
+            shapley_values = self._apply_ratio_approximation(
+                shapley_values, full_coalition_value
+            )
 
         return shapley_values

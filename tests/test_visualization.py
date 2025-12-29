@@ -24,10 +24,13 @@ import os
 import shutil
 
 # Use non-interactive backend for testing
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 
 from shapG.visualization.plot import plot
-from shapG.visualization.visualization import FeatureImportanceVisualizer, plot_shapley_values
+from shapG.visualization.visualization import (
+    FeatureImportanceVisualizer,
+    plot_shapley_values,
+)
 
 
 class VisualizationTestBase(unittest.TestCase):
@@ -48,12 +51,12 @@ class VisualizationTestBase(unittest.TestCase):
         super().setUp()
         # Create test_outputs directory under project root
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.test_output_dir = os.path.join(project_root, 'test_outputs')
+        self.test_output_dir = os.path.join(project_root, "test_outputs")
 
         # Create directory if it doesn't exist
         os.makedirs(self.test_output_dir, exist_ok=True)
 
-    def get_test_filename(self, test_name=None, suffix='.png'):
+    def get_test_filename(self, test_name=None, suffix=".png"):
         """Get a filename for saving test plots.
 
         Args:
@@ -66,11 +69,12 @@ class VisualizationTestBase(unittest.TestCase):
         if test_name is None:
             # Auto-detect test name from the calling method
             import inspect
+
             test_name = inspect.stack()[1].function
 
         # Create a descriptive filename
         class_name = self.__class__.__name__
-        filename = f'{class_name}_{test_name}{suffix}'
+        filename = f"{class_name}_{test_name}{suffix}"
         return os.path.join(self.test_output_dir, filename)
 
 
@@ -81,11 +85,11 @@ class TestPlotFunction(VisualizationTestBase):
         """Set up test fixtures."""
         super().setUp()
         self.shapley_values = {
-            'Feature_A': 0.5,
-            'Feature_B': -0.3,
-            'Feature_C': 0.8,
-            'Feature_D': 0.1,
-            'Feature_E': -0.2
+            "Feature_A": 0.5,
+            "Feature_B": -0.3,
+            "Feature_C": 0.8,
+            "Feature_D": 0.1,
+            "Feature_E": -0.2,
         }
 
     def test_basic_plot_creation(self):
@@ -102,7 +106,9 @@ class TestPlotFunction(VisualizationTestBase):
         self.assertIsInstance(ax, plt.Axes)
 
         # Verify file was created
-        self.assertTrue(os.path.exists(test_file), f"Plot file should be created at {test_file}")
+        self.assertTrue(
+            os.path.exists(test_file), f"Plot file should be created at {test_file}"
+        )
         print(f"✓ Plot saved to: {test_file}")
 
         plt.close(fig)
@@ -111,7 +117,9 @@ class TestPlotFunction(VisualizationTestBase):
         """Test top_n parameter functionality."""
         # Test with top 3 and save to test_outputs directory
         test_file = self.get_test_filename()
-        fig, ax = plot(self.shapley_values, top_n=3, file_name=test_file, show_plot=False)
+        fig, ax = plot(
+            self.shapley_values, top_n=3, file_name=test_file, show_plot=False
+        )
 
         # Should show only top 3 features
         y_labels = [label.get_text() for label in ax.get_yticklabels()]
@@ -120,14 +128,16 @@ class TestPlotFunction(VisualizationTestBase):
         self.assertLessEqual(len(visible_labels), 3)
 
         # Verify file was created
-        self.assertTrue(os.path.exists(test_file), f"Plot file should be created at {test_file}")
+        self.assertTrue(
+            os.path.exists(test_file), f"Plot file should be created at {test_file}"
+        )
         print(f"✓ Top-3 plot saved to: {test_file}")
 
         plt.close(fig)
 
     def test_style_parameter(self):
         """Test different style parameters."""
-        styles = ['default', 'seaborn-v0_8']
+        styles = ["default", "seaborn-v0_8"]
 
         for style in styles:
             try:
@@ -141,7 +151,7 @@ class TestPlotFunction(VisualizationTestBase):
     def test_feature_names_as_list(self):
         """Test feature_names parameter as list."""
         values = {0: 0.5, 1: -0.3, 2: 0.8}
-        feature_names = ['Custom_A', 'Custom_B', 'Custom_C']
+        feature_names = ["Custom_A", "Custom_B", "Custom_C"]
 
         fig, ax = plot(values, feature_names=feature_names, show_plot=False)
 
@@ -155,7 +165,7 @@ class TestPlotFunction(VisualizationTestBase):
     def test_feature_names_as_dict(self):
         """Test feature_names parameter as dictionary."""
         values = {0: 0.5, 1: -0.3, 2: 0.8}
-        feature_names = {0: 'Dict_A', 1: 'Dict_B', 2: 'Dict_C'}
+        feature_names = {0: "Dict_A", 1: "Dict_B", 2: "Dict_C"}
 
         fig, ax = plot(values, feature_names=feature_names, show_plot=False)
 
@@ -166,16 +176,16 @@ class TestPlotFunction(VisualizationTestBase):
         """Test plot customization parameters."""
         fig, ax = plot(
             self.shapley_values,
-            title='Custom Title',
+            title="Custom Title",
             figsize=(10, 8),
-            color='red',
+            color="red",
             show_values=True,
-            value_format='{:.3f}',
-            show_plot=False
+            value_format="{:.3f}",
+            show_plot=False,
         )
 
         # Check title
-        self.assertEqual(ax.get_title(), 'Custom Title')
+        self.assertEqual(ax.get_title(), "Custom Title")
 
         # Check figure size
         self.assertEqual(fig.get_figwidth(), 10)
@@ -185,14 +195,12 @@ class TestPlotFunction(VisualizationTestBase):
 
     def test_file_saving(self):
         """Test saving plot to file."""
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             temp_filename = tmp.name
 
         try:
             fig, ax = plot(
-                self.shapley_values,
-                file_name=temp_filename,
-                show_plot=False
+                self.shapley_values, file_name=temp_filename, show_plot=False
             )
 
             # File should be created
@@ -216,7 +224,7 @@ class TestPlotFunction(VisualizationTestBase):
 
     def test_single_value(self):
         """Test with single value."""
-        single_value = {'OnlyFeature': 0.7}
+        single_value = {"OnlyFeature": 0.7}
 
         fig, ax = plot(single_value, show_plot=False)
         self.assertIsInstance(fig, plt.Figure)
@@ -225,7 +233,7 @@ class TestPlotFunction(VisualizationTestBase):
 
     def test_zero_values(self):
         """Test with all zero values."""
-        zero_values = {'A': 0.0, 'B': 0.0, 'C': 0.0}
+        zero_values = {"A": 0.0, "B": 0.0, "C": 0.0}
 
         fig, ax = plot(zero_values, show_plot=False)
         self.assertIsInstance(fig, plt.Figure)
@@ -234,7 +242,7 @@ class TestPlotFunction(VisualizationTestBase):
 
     def test_negative_values(self):
         """Test with negative values."""
-        negative_values = {'A': -0.5, 'B': -0.3, 'C': -0.8}
+        negative_values = {"A": -0.5, "B": -0.3, "C": -0.8}
 
         fig, ax = plot(negative_values, show_plot=False)
         self.assertIsInstance(fig, plt.Figure)
@@ -250,11 +258,11 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
         super().setUp()
         self.visualizer = FeatureImportanceVisualizer()
         self.shapley_values = {
-            'Feature_A': 0.5,
-            'Feature_B': -0.3,
-            'Feature_C': 0.8,
-            'Feature_D': 0.1,
-            'Feature_E': -0.2
+            "Feature_A": 0.5,
+            "Feature_B": -0.3,
+            "Feature_C": 0.8,
+            "Feature_D": 0.1,
+            "Feature_E": -0.2,
         }
 
     def test_initialization(self):
@@ -263,29 +271,28 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
         self.assertIsInstance(viz, FeatureImportanceVisualizer)
 
         # Test with custom parameters
-        viz_custom = FeatureImportanceVisualizer(
-            figsize=(12, 8),
-            style='default'
-        )
+        viz_custom = FeatureImportanceVisualizer(figsize=(12, 8), style="default")
         self.assertEqual(viz_custom.figsize, (12, 8))
-        self.assertEqual(viz_custom.style, 'default')
+        self.assertEqual(viz_custom.style, "default")
 
     def test_plot_importance(self):
         """Test plot_importance method with file saving."""
         test_file = self.get_test_filename()
         fig, ax = self.visualizer.plot_importance(
             self.shapley_values,
-            title='Test Importance',
+            title="Test Importance",
             filename=test_file,
-            show_plot=False
+            show_plot=False,
         )
 
         self.assertIsInstance(fig, plt.Figure)
         self.assertIsInstance(ax, plt.Axes)
-        self.assertEqual(ax.get_title(), 'Test Importance')
+        self.assertEqual(ax.get_title(), "Test Importance")
 
         # Verify file was created
-        self.assertTrue(os.path.exists(test_file), f"Plot file should be created at {test_file}")
+        self.assertTrue(
+            os.path.exists(test_file), f"Plot file should be created at {test_file}"
+        )
         print(f"✓ Importance plot saved to: {test_file}")
 
         plt.close(fig)
@@ -293,20 +300,18 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
     def test_plot_comparison(self):
         """Test plot_comparison method."""
         methods_data = {
-            'ShapG': self.shapley_values,
-            'CIS': {
-                'Feature_A': 0.4,
-                'Feature_B': -0.2,
-                'Feature_C': 0.7,
-                'Feature_D': 0.15,
-                'Feature_E': -0.25
-            }
+            "ShapG": self.shapley_values,
+            "CIS": {
+                "Feature_A": 0.4,
+                "Feature_B": -0.2,
+                "Feature_C": 0.7,
+                "Feature_D": 0.15,
+                "Feature_E": -0.25,
+            },
         }
 
         fig, ax = self.visualizer.plot_comparison(
-            methods_data,
-            title='Methods Comparison',
-            show_plot=False
+            methods_data, title="Methods Comparison", show_plot=False
         )
 
         self.assertIsInstance(fig, plt.Figure)
@@ -317,16 +322,16 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
     def test_plot_heatmap(self):
         """Test plot_heatmap method."""
         # Create matrix data
-        methods = ['ShapG', 'CIS', 'Exact']
-        features = ['A', 'B', 'C', 'D']
+        methods = ["ShapG", "CIS", "Exact"]
+        features = ["A", "B", "C", "D"]
         matrix_data = np.random.randn(len(features), len(methods))
 
         fig, ax = self.visualizer.plot_heatmap(
             matrix_data,
             row_labels=features,
             col_labels=methods,
-            title='Heatmap Test',
-            show_plot=False
+            title="Heatmap Test",
+            show_plot=False,
         )
 
         self.assertIsInstance(fig, plt.Figure)
@@ -344,10 +349,7 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
         node_values = {0: 0.5, 1: -0.3, 2: 0.8, 3: 0.1}
 
         fig, ax = self.visualizer.plot_network(
-            G,
-            node_values=node_values,
-            title='Network Test',
-            show_plot=False
+            G, node_values=node_values, title="Network Test", show_plot=False
         )
 
         self.assertIsInstance(fig, plt.Figure)
@@ -361,9 +363,7 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
         G.add_edges_from([(0, 1), (1, 2), (2, 0)])
 
         fig, ax = self.visualizer.plot_network(
-            G,
-            title='Network Without Values',
-            show_plot=False
+            G, title="Network Without Values", show_plot=False
         )
 
         self.assertIsInstance(fig, plt.Figure)
@@ -371,15 +371,10 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
 
     def test_different_parameters(self):
         """Test visualizer with different parameters."""
-        viz = FeatureImportanceVisualizer(
-            figsize=(15, 10),
-            style='default'
-        )
+        viz = FeatureImportanceVisualizer(figsize=(15, 10), style="default")
 
         fig, ax = viz.plot_importance(
-            self.shapley_values,
-            color='green',
-            show_plot=False
+            self.shapley_values, color="green", show_plot=False
         )
 
         self.assertEqual(fig.get_figwidth(), 15)
@@ -389,14 +384,12 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
 
     def test_file_saving_methods(self):
         """Test saving plots to files."""
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             temp_filename = tmp.name
 
         try:
             fig, ax = self.visualizer.plot_importance(
-                self.shapley_values,
-                filename=temp_filename,
-                show_plot=False
+                self.shapley_values, filename=temp_filename, show_plot=False
             )
 
             # File should be created
@@ -416,10 +409,7 @@ class TestFeatureImportanceVisualizer(VisualizationTestBase):
         plt.close(fig)
 
         # Single value
-        fig, ax = self.visualizer.plot_importance(
-            {'Single': 0.5},
-            show_plot=False
-        )
+        fig, ax = self.visualizer.plot_importance({"Single": 0.5}, show_plot=False)
         self.assertIsInstance(fig, plt.Figure)
         plt.close(fig)
 
@@ -430,36 +420,31 @@ class TestPlotShapleyValues(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.shapley_values = {
-            'Feature_A': 0.5,
-            'Feature_B': -0.3,
-            'Feature_C': 0.8,
-            'Feature_D': 0.1
+            "Feature_A": 0.5,
+            "Feature_B": -0.3,
+            "Feature_C": 0.8,
+            "Feature_D": 0.1,
         }
 
     def test_basic_functionality(self):
         """Test basic functionality."""
         fig, ax = plot_shapley_values(
-            self.shapley_values,
-            title='Test Plot',
-            show_plot=False
+            self.shapley_values, title="Test Plot", show_plot=False
         )
 
         self.assertIsInstance(fig, plt.Figure)
         self.assertIsInstance(ax, plt.Axes)
-        self.assertEqual(ax.get_title(), 'Test Plot')
+        self.assertEqual(ax.get_title(), "Test Plot")
 
         plt.close(fig)
 
     def test_with_graph_context(self):
         """Test with graph context."""
         G = nx.Graph()
-        G.add_edges_from([('Feature_A', 'Feature_B'), ('Feature_B', 'Feature_C')])
+        G.add_edges_from([("Feature_A", "Feature_B"), ("Feature_B", "Feature_C")])
 
         fig, ax = plot_shapley_values(
-            self.shapley_values,
-            graph=G,
-            layout='spring',
-            show_plot=False
+            self.shapley_values, graph=G, layout="spring", show_plot=False
         )
 
         self.assertIsInstance(fig, plt.Figure)
@@ -468,16 +453,13 @@ class TestPlotShapleyValues(unittest.TestCase):
     def test_different_layouts(self):
         """Test different graph layouts."""
         G = nx.Graph()
-        G.add_edges_from([('Feature_A', 'Feature_B'), ('Feature_B', 'Feature_C')])
+        G.add_edges_from([("Feature_A", "Feature_B"), ("Feature_B", "Feature_C")])
 
-        layouts = ['spring', 'circular', 'random']
+        layouts = ["spring", "circular", "random"]
 
         for layout in layouts:
             fig, ax = plot_shapley_values(
-                self.shapley_values,
-                graph=G,
-                layout=layout,
-                show_plot=False
+                self.shapley_values, graph=G, layout=layout, show_plot=False
             )
 
             self.assertIsInstance(fig, plt.Figure)
@@ -490,7 +472,7 @@ class TestPlotShapleyValues(unittest.TestCase):
             figsize=(12, 8),
             node_size=1000,
             font_size=12,
-            show_plot=False
+            show_plot=False,
         )
 
         self.assertEqual(fig.get_figwidth(), 12)
@@ -500,10 +482,7 @@ class TestPlotShapleyValues(unittest.TestCase):
 
     def test_without_graph(self):
         """Test plotting without graph (should create bar plot)."""
-        fig, ax = plot_shapley_values(
-            self.shapley_values,
-            show_plot=False
-        )
+        fig, ax = plot_shapley_values(self.shapley_values, show_plot=False)
 
         self.assertIsInstance(fig, plt.Figure)
         plt.close(fig)
@@ -518,24 +497,26 @@ class TestVisualizationIntegration(unittest.TestCase):
         np.random.seed(42)
         data = pd.DataFrame(
             np.random.randn(50, 4),
-            columns=['Feature_A', 'Feature_B', 'Feature_C', 'Feature_D']
+            columns=["Feature_A", "Feature_B", "Feature_C", "Feature_D"],
         )
 
         # Simulate Shapley values
         shapley_values = {
-            'Feature_A': 0.3,
-            'Feature_B': -0.1,
-            'Feature_C': 0.5,
-            'Feature_D': 0.2
+            "Feature_A": 0.3,
+            "Feature_B": -0.1,
+            "Feature_C": 0.5,
+            "Feature_D": 0.2,
         }
 
         # Create graph
         G = nx.Graph()
-        G.add_edges_from([
-            ('Feature_A', 'Feature_B'),
-            ('Feature_B', 'Feature_C'),
-            ('Feature_C', 'Feature_D')
-        ])
+        G.add_edges_from(
+            [
+                ("Feature_A", "Feature_B"),
+                ("Feature_B", "Feature_C"),
+                ("Feature_C", "Feature_D"),
+            ]
+        )
 
         # Test multiple visualization methods
         visualizer = FeatureImportanceVisualizer()
@@ -547,9 +528,7 @@ class TestVisualizationIntegration(unittest.TestCase):
 
         # Network plot
         fig2, ax2 = visualizer.plot_network(
-            G,
-            node_values=shapley_values,
-            show_plot=False
+            G, node_values=shapley_values, show_plot=False
         )
         self.assertIsInstance(fig2, plt.Figure)
         plt.close(fig2)
@@ -566,7 +545,7 @@ class TestVisualizationIntegration(unittest.TestCase):
 
     def test_consistency_between_methods(self):
         """Test consistency between different plotting methods."""
-        values = {'A': 0.5, 'B': -0.3, 'C': 0.8}
+        values = {"A": 0.5, "B": -0.3, "C": 0.8}
 
         # Legacy plot function
         fig1, ax1 = plot(values, show_plot=False)
@@ -600,7 +579,7 @@ class TestVisualizationIntegration(unittest.TestCase):
     def test_large_data_handling(self):
         """Test handling of large datasets."""
         # Create large shapley values dictionary
-        large_values = {f'Feature_{i}': np.random.randn() for i in range(100)}
+        large_values = {f"Feature_{i}": np.random.randn() for i in range(100)}
 
         # Should handle large data without errors
         fig, ax = plot(large_values, top_n=20, show_plot=False)
@@ -616,17 +595,17 @@ class TestVisualizationIntegration(unittest.TestCase):
         """Test that plots don't cause memory leaks."""
         # Create and close many plots
         for i in range(10):
-            values = {f'F_{j}': np.random.randn() for j in range(5)}
+            values = {f"F_{j}": np.random.randn() for j in range(5)}
             fig, ax = plot(values, show_plot=False)
             plt.close(fig)
 
         # Should complete without memory issues
         self.assertTrue(True)
 
-    @patch('matplotlib.pyplot.show')
+    @patch("matplotlib.pyplot.show")
     def test_show_plot_parameter(self, mock_show):
         """Test that show_plot parameter controls display."""
-        values = {'A': 0.5, 'B': -0.3}
+        values = {"A": 0.5, "B": -0.3}
 
         # With show_plot=False, plt.show() should not be called
         plot(values, show_plot=False)
@@ -639,5 +618,5 @@ class TestVisualizationIntegration(unittest.TestCase):
         plt.close(fig)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

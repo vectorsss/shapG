@@ -13,7 +13,7 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from shapG.utils import (
     corr_generator,
@@ -22,7 +22,7 @@ from shapG.utils import (
     kl_mi_matrix,
     create_minimal_edge_graph,
     GraphBuilder,
-    CoalitionManager
+    CoalitionManager,
 )
 
 
@@ -32,7 +32,7 @@ class TestCorrGenerator(unittest.TestCase):
     def test_basic_correlation_matrix(self):
         """Test basic correlation matrix generation."""
         data = np.random.randn(100, 5)
-        df = pd.DataFrame(data, columns=['A', 'B', 'C', 'D', 'E'])
+        df = pd.DataFrame(data, columns=["A", "B", "C", "D", "E"])
 
         corr_matrix = corr_generator(df)
 
@@ -43,7 +43,9 @@ class TestCorrGenerator(unittest.TestCase):
         np.testing.assert_array_almost_equal(corr_matrix, corr_matrix.T)
 
         # Diagonal should be 1 (or close to 1)
-        np.testing.assert_array_almost_equal(np.diag(corr_matrix), np.ones(5), decimal=10)
+        np.testing.assert_array_almost_equal(
+            np.diag(corr_matrix), np.ones(5), decimal=10
+        )
 
         # Values should be between -1 and 1
         self.assertTrue(np.all(corr_matrix >= -1))
@@ -55,7 +57,7 @@ class TestCorrGenerator(unittest.TestCase):
         df = pd.DataFrame(data)
 
         # Test different methods
-        methods = ['pearson', 'kendall', 'spearman']
+        methods = ["pearson", "kendall", "spearman"]
         for method in methods:
             corr_matrix = corr_generator(df, method=method)
             self.assertEqual(corr_matrix.shape, (3, 3))
@@ -91,7 +93,9 @@ class TestCorrGenerator(unittest.TestCase):
         corr_matrix = corr_generator(data)
         self.assertEqual(corr_matrix.shape, (2, 2))
         # Correlation of constant with itself should be handled
-        self.assertTrue(np.isnan(corr_matrix.iloc[0, 1]) or corr_matrix.iloc[0, 1] == 0.0)
+        self.assertTrue(
+            np.isnan(corr_matrix.iloc[0, 1]) or corr_matrix.iloc[0, 1] == 0.0
+        )
 
 
 class TestMatrixGenerator(unittest.TestCase):
@@ -119,7 +123,7 @@ class TestMatrixGenerator(unittest.TestCase):
         data = np.random.randn(50, 3)
         df = pd.DataFrame(data)
 
-        methods = ['pearson', 'kendall', 'spearman']
+        methods = ["pearson", "kendall", "spearman"]
         for method in methods:
             matrix = matrix_generator(df, method=method)
             self.assertEqual(matrix.shape, (3, 3))
@@ -133,7 +137,7 @@ class TestMatrixGenerator(unittest.TestCase):
         y = x + 0.1 * np.random.randn(n)  # Positively correlated
         z = -x + 0.1 * np.random.randn(n)  # Negatively correlated
 
-        data = pd.DataFrame({'x': x, 'y': y, 'z': z})
+        data = pd.DataFrame({"x": x, "y": y, "z": z})
         matrix = matrix_generator(data)
 
         # Should capture correlation structure
@@ -146,7 +150,7 @@ class TestMatrixGenerator(unittest.TestCase):
         df = pd.DataFrame(data)
 
         # Compare with direct scipy calculation for kendall
-        matrix = matrix_generator(df, method='kendall')
+        matrix = matrix_generator(df, method="kendall")
 
         # Manual kendall calculation for first two columns
         tau, _ = kendalltau(df.iloc[:, 0], df.iloc[:, 1])
@@ -223,9 +227,12 @@ class TestKLFunctions(unittest.TestCase):
     def test_kl_mi_matrix_with_constant_data(self):
         """Test kl_mi_matrix with constant data."""
         import warnings
+
         # Suppress sklearn warning about constant features (expected in this test)
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Feature .* is constant", category=UserWarning)
+            warnings.filterwarnings(
+                "ignore", message="Feature .* is constant", category=UserWarning
+            )
             # Constant data
             data = np.ones((50, 2))
 
@@ -240,12 +247,14 @@ class TestCreateMinimalEdgeGraph(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Create a simple correlation matrix
-        self.W = np.array([
-            [1.0, 0.8, 0.3, 0.1],
-            [0.8, 1.0, 0.5, 0.2],
-            [0.3, 0.5, 1.0, 0.7],
-            [0.1, 0.2, 0.7, 1.0]
-        ])
+        self.W = np.array(
+            [
+                [1.0, 0.8, 0.3, 0.1],
+                [0.8, 1.0, 0.5, 0.2],
+                [0.3, 0.5, 1.0, 0.7],
+                [0.1, 0.2, 0.7, 1.0],
+            ]
+        )
 
     def test_basic_functionality(self):
         """Test basic minimal edge graph creation."""
@@ -268,7 +277,7 @@ class TestCreateMinimalEdgeGraph(unittest.TestCase):
 
     def test_different_versions(self):
         """Test different algorithm versions."""
-        versions = ['v1', 'v2', 'v3']
+        versions = ["v1", "v2", "v3"]
 
         for version in versions:
             A, W_new = create_minimal_edge_graph(self.W, version=version)
@@ -319,14 +328,13 @@ class TestCreateMinimalEdgeGraph(unittest.TestCase):
         self.assertEqual(G.number_of_nodes(), len(self.W))
 
 
-
 class TestGraphBuilder(unittest.TestCase):
     """Test GraphBuilder class."""
 
     def setUp(self):
         """Set up test fixtures."""
         self.builder = GraphBuilder()
-        self.data = pd.DataFrame(np.random.randn(50, 4), columns=['A', 'B', 'C', 'D'])
+        self.data = pd.DataFrame(np.random.randn(50, 4), columns=["A", "B", "C", "D"])
 
     def test_from_correlation(self):
         """Test graph building from correlation."""
@@ -336,7 +344,7 @@ class TestGraphBuilder(unittest.TestCase):
         self.assertEqual(G.number_of_nodes(), 4)
 
         # Node labels should be column names
-        self.assertEqual(set(G.nodes()), {'A', 'B', 'C', 'D'})
+        self.assertEqual(set(G.nodes()), {"A", "B", "C", "D"})
 
     def test_from_correlation_parameters(self):
         """Test from_correlation with different parameters."""
@@ -348,7 +356,7 @@ class TestGraphBuilder(unittest.TestCase):
         self.assertLessEqual(G2.number_of_edges(), G1.number_of_edges())
 
         # Test different methods
-        G3 = self.builder.from_correlation(self.data, method='kendall', threshold=0.3)
+        G3 = self.builder.from_correlation(self.data, method="kendall", threshold=0.3)
         self.assertEqual(G3.number_of_nodes(), 4)
 
     def test_from_mutual_information(self):
@@ -360,12 +368,7 @@ class TestGraphBuilder(unittest.TestCase):
 
     def test_from_adjacency(self):
         """Test graph building from adjacency matrix."""
-        adj_matrix = np.array([
-            [0, 1, 1, 0],
-            [1, 0, 0, 1],
-            [1, 0, 0, 1],
-            [0, 1, 1, 0]
-        ])
+        adj_matrix = np.array([[0, 1, 1, 0], [1, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
 
         G = self.builder.from_adjacency(adj_matrix)
 
@@ -376,11 +379,11 @@ class TestGraphBuilder(unittest.TestCase):
     def test_from_adjacency_with_labels(self):
         """Test from_adjacency with node labels."""
         adj_matrix = np.array([[0, 1], [1, 0]])
-        labels = ['X', 'Y']
+        labels = ["X", "Y"]
 
         G = self.builder.from_adjacency(adj_matrix, node_labels=labels)
 
-        self.assertEqual(set(G.nodes()), {'X', 'Y'})
+        self.assertEqual(set(G.nodes()), {"X", "Y"})
         self.assertEqual(G.number_of_edges(), 1)
 
     def test_random_graph(self):
@@ -396,14 +399,16 @@ class TestGraphBuilder(unittest.TestCase):
 
     def test_from_kendalltau_minimal_edge(self):
         """Test from_kendalltau_minimal_edge method."""
-        G = self.builder.from_kendalltau_minimal_edge(self.data, reverse=True, version='v3')
+        G = self.builder.from_kendalltau_minimal_edge(
+            self.data, reverse=True, version="v3"
+        )
 
         self.assertIsInstance(G, nx.Graph)
         self.assertEqual(G.number_of_nodes(), 4)
 
     def test_from_matrix_generator(self):
         """Test from_matrix_generator method."""
-        G = self.builder.from_matrix_generator(self.data, method='kendall')
+        G = self.builder.from_matrix_generator(self.data, method="kendall")
 
         self.assertIsInstance(G, nx.Graph)
         self.assertEqual(G.number_of_nodes(), 4)
@@ -439,17 +444,17 @@ class TestGraphBuilder(unittest.TestCase):
         self.assertTrue(nx.is_connected(G))
 
         # Check metadata
-        self.assertIn('actual_density_ratio', G.graph)
+        self.assertIn("actual_density_ratio", G.graph)
 
     def test_from_rank_deletion_with_dataframe(self):
         """Test from_rank_deletion with DataFrame input."""
-        X = pd.DataFrame(np.random.randn(100, 4), columns=['A', 'B', 'C', 'D'])
+        X = pd.DataFrame(np.random.randn(100, 4), columns=["A", "B", "C", "D"])
         y = np.random.randn(100)
 
         G = GraphBuilder.from_rank_deletion(X, y)
 
         self.assertIsInstance(G, nx.Graph)
-        self.assertEqual(set(G.nodes()), {'A', 'B', 'C', 'D'})
+        self.assertEqual(set(G.nodes()), {"A", "B", "C", "D"})
         self.assertTrue(nx.is_connected(G))
 
     def test_from_rank_deletion_density_ratio(self):
@@ -488,13 +493,11 @@ class TestGraphBuilder(unittest.TestCase):
         X = np.random.randn(60, 4)
         y = np.random.randn(60)
 
-        methods = ['cosine', 'pearsonr', 'kendalltau', 'spearmanr', 'mutual_info']
+        methods = ["cosine", "pearsonr", "kendalltau", "spearmanr", "mutual_info"]
 
         for method in methods:
             G = GraphBuilder.from_rank_deletion(
-                X, y,
-                correlation_method=method,
-                similarity_method=method
+                X, y, correlation_method=method, similarity_method=method
             )
 
             self.assertIsInstance(G, nx.Graph)
@@ -507,16 +510,10 @@ class TestGraphBuilder(unittest.TestCase):
         y = np.random.randn(50)
 
         # Define feature ranges: 3 numerical, 2 categorical, 1 binary
-        feature_ranges = {
-            'num': (0, 3),
-            'cat': (3, 5),
-            'bin': (5, 6)
-        }
+        feature_ranges = {"num": (0, 3), "cat": (3, 5), "bin": (5, 6)}
 
         G = GraphBuilder.from_rank_deletion(
-            X, y,
-            feature_ranges=feature_ranges,
-            enforce_cross_type_edges=True
+            X, y, feature_ranges=feature_ranges, enforce_cross_type_edges=True
         )
 
         self.assertIsInstance(G, nx.Graph)
@@ -532,9 +529,9 @@ class TestGraphBuilder(unittest.TestCase):
 
         # Check that edges have weights
         for u, v in G.edges():
-            self.assertIn('weight', G[u][v])
-            self.assertIsInstance(G[u][v]['weight'], (int, float, np.number))
-            self.assertGreaterEqual(G[u][v]['weight'], 0)
+            self.assertIn("weight", G[u][v])
+            self.assertIsInstance(G[u][v]["weight"], (int, float, np.number))
+            self.assertGreaterEqual(G[u][v]["weight"], 0)
 
     def test_from_rank_deletion_small_graph(self):
         """Test from_rank_deletion with small graphs."""
@@ -545,7 +542,9 @@ class TestGraphBuilder(unittest.TestCase):
         G = GraphBuilder.from_rank_deletion(X, y)
 
         self.assertEqual(G.number_of_nodes(), 3)
-        self.assertGreaterEqual(G.number_of_edges(), 2)  # At least minimum for connectivity
+        self.assertGreaterEqual(
+            G.number_of_edges(), 2
+        )  # At least minimum for connectivity
         self.assertTrue(nx.is_connected(G))
 
     def test_from_rank_deletion_reproducibility(self):
@@ -568,7 +567,7 @@ class TestGraphBuilder(unittest.TestCase):
         y = np.random.randn(50)
 
         # Test different ranking methods
-        for method in ['cosine', 'pearsonr', 'mutual_info']:
+        for method in ["cosine", "pearsonr", "mutual_info"]:
             rank = GraphBuilder._get_feature_rank(X, y, method)
 
             self.assertIsInstance(rank, list)
@@ -580,7 +579,7 @@ class TestGraphBuilder(unittest.TestCase):
         X = np.random.randn(50, 4)
 
         # Test different similarity methods
-        for method in ['cosine', 'pearsonr', 'mutual_info']:
+        for method in ["cosine", "pearsonr", "mutual_info"]:
             sim_matrix = GraphBuilder._calculate_similarity_matrix(X, method)
 
             self.assertEqual(sim_matrix.shape, (4, 4))
@@ -592,25 +591,18 @@ class TestGraphBuilder(unittest.TestCase):
 
     def test_get_feature_type(self):
         """Test _get_feature_type helper method."""
-        feature_ranges = {
-            'num': (0, 3),
-            'cat': (3, 5),
-            'bin': (5, 6)
-        }
+        feature_ranges = {"num": (0, 3), "cat": (3, 5), "bin": (5, 6)}
 
-        self.assertEqual(GraphBuilder._get_feature_type(0, feature_ranges), 'num')
-        self.assertEqual(GraphBuilder._get_feature_type(2, feature_ranges), 'num')
-        self.assertEqual(GraphBuilder._get_feature_type(3, feature_ranges), 'cat')
-        self.assertEqual(GraphBuilder._get_feature_type(4, feature_ranges), 'cat')
-        self.assertEqual(GraphBuilder._get_feature_type(5, feature_ranges), 'bin')
-        self.assertEqual(GraphBuilder._get_feature_type(6, feature_ranges), 'unknown')
+        self.assertEqual(GraphBuilder._get_feature_type(0, feature_ranges), "num")
+        self.assertEqual(GraphBuilder._get_feature_type(2, feature_ranges), "num")
+        self.assertEqual(GraphBuilder._get_feature_type(3, feature_ranges), "cat")
+        self.assertEqual(GraphBuilder._get_feature_type(4, feature_ranges), "cat")
+        self.assertEqual(GraphBuilder._get_feature_type(5, feature_ranges), "bin")
+        self.assertEqual(GraphBuilder._get_feature_type(6, feature_ranges), "unknown")
 
     def test_is_cross_type_edge(self):
         """Test _is_cross_type_edge helper method."""
-        feature_ranges = {
-            'num': (0, 2),
-            'cat': (2, 4)
-        }
+        feature_ranges = {"num": (0, 2), "cat": (2, 4)}
 
         # Numerical to categorical should be cross-type
         self.assertTrue(GraphBuilder._is_cross_type_edge(0, 2, feature_ranges, True))
@@ -658,7 +650,7 @@ class TestCoalitionManager(unittest.TestCase):
 
         # Should have 2^n coalitions where n is number of nodes
         n_nodes = self.G.number_of_nodes()
-        expected_count = 2 ** n_nodes
+        expected_count = 2**n_nodes
 
         self.assertEqual(len(coalitions), expected_count)
 
@@ -682,7 +674,7 @@ class TestCoalitionManager(unittest.TestCase):
     def test_sample_coalitions_uniform(self):
         """Test uniform coalition sampling."""
         coalitions = self.manager.sample_coalitions(
-            self.G, n_samples=100, strategy='uniform', seed=42
+            self.G, n_samples=100, strategy="uniform", seed=42
         )
 
         self.assertEqual(len(coalitions), 100)
@@ -693,14 +685,14 @@ class TestCoalitionManager(unittest.TestCase):
 
         # Test reproducibility
         coalitions2 = self.manager.sample_coalitions(
-            self.G, n_samples=100, strategy='uniform', seed=42
+            self.G, n_samples=100, strategy="uniform", seed=42
         )
         self.assertEqual(coalitions, coalitions2)
 
     def test_sample_coalitions_stratified(self):
         """Test stratified coalition sampling."""
         coalitions = self.manager.sample_coalitions(
-            self.G, n_samples=50, strategy='stratified', seed=42
+            self.G, n_samples=50, strategy="stratified", seed=42
         )
 
         self.assertEqual(len(coalitions), 50)
@@ -712,7 +704,7 @@ class TestCoalitionManager(unittest.TestCase):
     def test_sample_coalitions_by_size(self):
         """Test coalition sampling by specific sizes."""
         coalitions = self.manager.sample_coalitions(
-            self.G, n_samples=20, strategy='by_size', coalition_sizes=[1, 2]
+            self.G, n_samples=20, strategy="by_size", coalition_sizes=[1, 2]
         )
 
         # Should only include coalitions of size 1 or 2
@@ -733,7 +725,7 @@ class TestCoalitionManager(unittest.TestCase):
         self.assertIsInstance(neighbors, set)
 
         coalitions = CoalitionManager.sample_coalitions(
-            self.G, n_samples=10, strategy='uniform', seed=42
+            self.G, n_samples=10, strategy="uniform", seed=42
         )
         self.assertEqual(len(coalitions), 10)
 
@@ -746,7 +738,7 @@ class TestUtilsIntegration(unittest.TestCase):
         # Generate test data
         np.random.seed(42)
         data = np.random.randn(100, 5)
-        df = pd.DataFrame(data, columns=['A', 'B', 'C', 'D', 'E'])
+        df = pd.DataFrame(data, columns=["A", "B", "C", "D", "E"])
 
         # Create correlation matrix
         corr_matrix = corr_generator(df)
@@ -760,12 +752,12 @@ class TestUtilsIntegration(unittest.TestCase):
 
         # Test final graph properties
         self.assertEqual(G.number_of_nodes(), 5)
-        self.assertEqual(set(G.nodes()), {'A', 'B', 'C', 'D', 'E'})
+        self.assertEqual(set(G.nodes()), {"A", "B", "C", "D", "E"})
         self.assertGreaterEqual(G.number_of_edges(), 0)
 
         # Test coalition management
         manager = CoalitionManager()
-        coalitions = manager.sample_coalitions(G, n_samples=50, strategy='uniform')
+        coalitions = manager.sample_coalitions(G, n_samples=50, strategy="uniform")
 
         self.assertEqual(len(coalitions), 50)
         for coalition in coalitions:
@@ -773,11 +765,11 @@ class TestUtilsIntegration(unittest.TestCase):
 
     def test_matrix_methods_consistency(self):
         """Test consistency between different matrix generation methods."""
-        data = pd.DataFrame(np.random.randn(50, 3), columns=['X', 'Y', 'Z'])
+        data = pd.DataFrame(np.random.randn(50, 3), columns=["X", "Y", "Z"])
 
         # Different methods should produce different but valid results
-        corr_matrix = corr_generator(data, method='pearson')
-        kendall_matrix = matrix_generator(data, method='kendall')
+        corr_matrix = corr_generator(data, method="pearson")
+        kendall_matrix = matrix_generator(data, method="kendall")
 
         # Both should be valid correlation matrices
         self.assertEqual(corr_matrix.shape, kendall_matrix.shape)
@@ -786,7 +778,7 @@ class TestUtilsIntegration(unittest.TestCase):
 
     def test_graph_builder_methods_consistency(self):
         """Test that different GraphBuilder methods produce valid graphs."""
-        data = pd.DataFrame(np.random.randn(30, 4), columns=['A', 'B', 'C', 'D'])
+        data = pd.DataFrame(np.random.randn(30, 4), columns=["A", "B", "C", "D"])
         y = np.random.randn(30)
         builder = GraphBuilder()
 
@@ -795,15 +787,15 @@ class TestUtilsIntegration(unittest.TestCase):
             lambda: builder.from_mutual_information(data, threshold=0.1),
             lambda: builder.from_kendalltau_minimal_edge(data),
             lambda: builder.from_matrix_generator(data),
-            lambda: builder.from_rank_deletion(data, y)
+            lambda: builder.from_rank_deletion(data, y),
         ]
 
         for method in methods:
             G = method()
             self.assertIsInstance(G, nx.Graph)
             self.assertEqual(G.number_of_nodes(), 4)
-            self.assertEqual(set(G.nodes()), {'A', 'B', 'C', 'D'})
+            self.assertEqual(set(G.nodes()), {"A", "B", "C", "D"})
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

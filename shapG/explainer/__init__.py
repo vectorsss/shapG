@@ -17,19 +17,19 @@ from .stratified_shapley import StratifiedShapleyExplainer
 
 __all__ = [
     # Base classes
-    'CharacteristicFunction',
-    'Explainer',
-    'GraphExplainer',
+    "CharacteristicFunction",
+    "Explainer",
+    "GraphExplainer",
     # Explainers
-    'ExactExplainer',
-    'ShapGExplainer',
-    'CISExplainer',
-    'RandomCSExplainer',
-    'QRCSExplainer',
-    'BlockQRCSExplainer',
-    'ImprovedQRCSExplainer',
-    'ImprovedBlockQRCSExplainer',
-    'LeverageScoreExplainer',
-    'MultilinearExplainer',
-    'StratifiedShapleyExplainer'
+    "ExactExplainer",
+    "ShapGExplainer",
+    "CISExplainer",
+    "RandomCSExplainer",
+    "QRCSExplainer",
+    "BlockQRCSExplainer",
+    "ImprovedQRCSExplainer",
+    "ImprovedBlockQRCSExplainer",
+    "LeverageScoreExplainer",
+    "MultilinearExplainer",
+    "StratifiedShapleyExplainer",
 ]

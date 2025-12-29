@@ -37,24 +37,29 @@ from .base import Explainer, CharacteristicFunction
 # Data Classes
 # =============================================================================
 
+
 @dataclass
 class ErrorBounds:
     """Rigorous error bounds for the LEM estimator."""
+
     quadrature_error: float
     sampling_error: float
     total_error: float
     confidence_level: float
 
     def __str__(self) -> str:
-        return (f"ErrorBounds(total={self.total_error:.2e}, "
-                f"quad={self.quadrature_error:.2e}, "
-                f"sample={self.sampling_error:.2e}, "
-                f"conf={self.confidence_level:.1%})")
+        return (
+            f"ErrorBounds(total={self.total_error:.2e}, "
+            f"quad={self.quadrature_error:.2e}, "
+            f"sample={self.sampling_error:.2e}, "
+            f"conf={self.confidence_level:.1%})"
+        )
 
 
 # =============================================================================
 # Helper Classes (Private)
 # =============================================================================
+
 
 class _LeverageScoreComputer:
     """
@@ -87,8 +92,12 @@ class _LeverageScoreComputer:
 
     LEVERAGE_TYPES = ("shapley_weighted", "inverse_coalition")
 
-    def __init__(self, n: int, leverage_type: str = "shapley_weighted",
-                 tilt_by_bernoulli: bool = True):
+    def __init__(
+        self,
+        n: int,
+        leverage_type: str = "shapley_weighted",
+        tilt_by_bernoulli: bool = True,
+    ):
         if leverage_type not in self.LEVERAGE_TYPES:
             raise ValueError(
                 f"leverage_type must be one of {self.LEVERAGE_TYPES}, got '{leverage_type}'"
@@ -111,9 +120,9 @@ class _LeverageScoreComputer:
             )
 
         # Number of coalitions by size (for player i, considering n-1 other players)
-        self._n_coalitions_by_size = np.array([
-            comb(self.n - 1, s, exact=True) for s in range(self.n)
-        ], dtype=float)
+        self._n_coalitions_by_size = np.array(
+            [comb(self.n - 1, s, exact=True) for s in range(self.n)], dtype=float
+        )
 
         # Compute base leverage scores based on leverage_type
         if self.leverage_type == "shapley_weighted":
@@ -167,8 +176,7 @@ class _LeverageScoreComputer:
         for s in range(self.n):
             if s <= n_others:
                 bernoulli_mass[s] = (
-                    comb(n_others, s, exact=True) *
-                    (t ** s) * ((1 - t) ** (n_others - s))
+                    comb(n_others, s, exact=True) * (t**s) * ((1 - t) ** (n_others - s))
                 )
 
         # Combine leverage and Bernoulli
@@ -221,6 +229,7 @@ class _LeverageScoreComputer:
         float
             Oversampling parameter c
         """
+
         def expected_samples(c):
             """Expected number of coalitions sampled."""
             total = 0
@@ -252,9 +261,7 @@ class _LeverageScoreComputer:
         return c_mid
 
     def allocate_across_quadrature(
-        self,
-        t_values: np.ndarray,
-        total_budget: int
+        self, t_values: np.ndarray, total_budget: int
     ) -> Tuple[np.ndarray, List[bool]]:
         """
         Allocate sample budget across quadrature points adaptively.
@@ -299,7 +306,9 @@ class _LeverageScoreComputer:
             for k in range(K):
                 if not is_exact[k]:
                     # Allocate proportionally to variance, minimum 1 sample
-                    allocations[k] = max(1, int(total_budget * variance_proxy[k] / total_variance))
+                    allocations[k] = max(
+                        1, int(total_budget * variance_proxy[k] / total_variance)
+                    )
 
         # Distribute remaining budget to highest variance points
         remaining = total_budget - allocations.sum()
@@ -322,7 +331,9 @@ class _StratifiedCoalitionSampler:
     estimation of E_{S~Bernoulli(t)}[Δ_i(S)].
     """
 
-    def __init__(self, leverage_computer: _LeverageScoreComputer, rng: np.random.Generator):
+    def __init__(
+        self, leverage_computer: _LeverageScoreComputer, rng: np.random.Generator
+    ):
         self.leverage = leverage_computer
         self.n = leverage_computer.n
         self.rng = rng
@@ -330,10 +341,7 @@ class _StratifiedCoalitionSampler:
         self.size_counts = np.zeros(self.n, dtype=int)
 
     def sample_stratified(
-        self,
-        player: int,
-        t: float,
-        n_samples: int
+        self, player: int, t: float, n_samples: int
     ) -> Tuple[List[Set[int]], np.ndarray]:
         """
         Sample coalitions using leverage-stratified sampling.
@@ -364,7 +372,9 @@ class _StratifiedCoalitionSampler:
             n_total = int(comb(n_others, s, exact=True))
 
             # True probability mass for size s under Bernoulli(t)
-            true_prob = comb(n_others, s, exact=True) * (t**s) * ((1-t)**(n_others-s))
+            true_prob = (
+                comb(n_others, s, exact=True) * (t**s) * ((1 - t) ** (n_others - s))
+            )
 
             # Our sampling probability (avoid division by zero)
             sample_prob = tilted[s] if tilted[s] > 1e-15 else 1e-15
@@ -407,12 +417,7 @@ class _StratifiedCoalitionSampler:
         """Get the size distribution of sampled coalitions."""
         return {s: int(count) for s, count in enumerate(self.size_counts) if count > 0}
 
-    def sample_naive(
-        self,
-        player: int,
-        t: float,
-        n_samples: int
-    ) -> List[Set[int]]:
+    def sample_naive(self, player: int, t: float, n_samples: int) -> List[Set[int]]:
         """Naive Bernoulli(t) sampling (for comparison)."""
         other_players = [j for j in range(self.n) if j != player]
 
@@ -424,10 +429,7 @@ class _StratifiedCoalitionSampler:
         return coalitions
 
     def sample_bernoulli(
-        self,
-        player: int,
-        t: float,
-        n_samples: int
+        self, player: int, t: float, n_samples: int
     ) -> Tuple[List[Set[int]], np.ndarray]:
         """
         Sample coalitions using Bernoulli sampling with leverage scores.
@@ -482,7 +484,9 @@ class _StratifiedCoalitionSampler:
                 continue
 
             # True probability mass for size s under Bernoulli(t)
-            true_prob = comb(n_others, s, exact=True) * (t**s) * ((1-t)**(n_others-s))
+            true_prob = (
+                comb(n_others, s, exact=True) * (t**s) * ((1 - t) ** (n_others - s))
+            )
 
             if prob >= 1.0:
                 # Exact enumeration - enumerate all coalitions of size s
@@ -512,7 +516,9 @@ class _StratifiedCoalitionSampler:
                         elif s >= n_others:
                             S = set(other_players)
                         else:
-                            S = set(self.rng.choice(other_players, size=s, replace=False))
+                            S = set(
+                                self.rng.choice(other_players, size=s, replace=False)
+                            )
                         coalitions.append(S)
                         weights.append(true_prob / prob)
                     self.size_counts[s] += n_sampled
@@ -533,11 +539,7 @@ class _ErrorBoundComputer:
     """
 
     def __init__(
-        self,
-        n: int,
-        n_quadrature: int,
-        n_samples: int,
-        confidence: float = 0.95
+        self, n: int, n_quadrature: int, n_samples: int, confidence: float = 0.95
     ):
         self.n = n
         self.K = n_quadrature
@@ -552,12 +554,10 @@ class _ErrorBoundComputer:
         Simpson's rule error: |∫f - S_K(f)| ≤ (b-a)^5 / 180 × max|f^(4)(x)| / K^4
         """
         h = 1.0 / (self.K - 1)
-        return (h ** 4) * fourth_derivative_bound / 180
+        return (h**4) * fourth_derivative_bound / 180
 
     def sampling_error_bound(
-        self,
-        variance_estimate: float,
-        leverage_efficiency: float = 1.0
+        self, variance_estimate: float, leverage_efficiency: float = 1.0
     ) -> float:
         """
         Compute Monte Carlo sampling error bound.
@@ -566,14 +566,14 @@ class _ErrorBoundComputer:
         """
         effective_samples = self.m * leverage_efficiency * self.K
         if effective_samples <= 0:
-            return float('inf')
+            return float("inf")
         return self.z_score * sqrt(variance_estimate / effective_samples)
 
     def compute_bounds(
         self,
         observed_variance: float,
         fourth_derivative_bound: float = 1.0,
-        leverage_efficiency: float = 1.0
+        leverage_efficiency: float = 1.0,
     ) -> ErrorBounds:
         """Compute complete error bounds."""
         quad_err = self.quadrature_error_bound(fourth_derivative_bound)
@@ -583,13 +583,14 @@ class _ErrorBoundComputer:
             quadrature_error=quad_err,
             sampling_error=samp_err,
             total_error=quad_err + samp_err,
-            confidence_level=self.confidence
+            confidence_level=self.confidence,
         )
 
 
 # =============================================================================
 # Main Explainer Class
 # =============================================================================
+
 
 class MultilinearExplainer(Explainer):
     """
@@ -690,7 +691,7 @@ class MultilinearExplainer(Explainer):
         compute_error_bounds: bool = False,
         confidence: float = 0.95,
         seed: Optional[int] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         super().__init__(characteristic_function, verbose)
 
@@ -716,7 +717,7 @@ class MultilinearExplainer(Explainer):
         self._n_quadrature_user = n_quadrature
         self._n_samples_user = n_samples
         self.n_quadrature = None  # Will be set in explain()
-        self.n_samples = None     # Will be set in explain()
+        self.n_samples = None  # Will be set in explain()
         self.use_leverage = use_leverage
         self.sampling_method = sampling_method
         self.leverage_type = leverage_type
@@ -779,7 +780,9 @@ class MultilinearExplainer(Explainer):
 
         return n_quadrature, n_samples
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **_kwargs) -> 'MultilinearExplainer':
+    def fit(
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **_kwargs
+    ) -> "MultilinearExplainer":
         """
         Fit the explainer to data.
 
@@ -811,7 +814,9 @@ class MultilinearExplainer(Explainer):
 
         return self
 
-    def explain(self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs) -> Dict:
+    def explain(
+        self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
+    ) -> Dict:
         """
         Compute Shapley values using multilinear extension.
 
@@ -859,7 +864,9 @@ class MultilinearExplainer(Explainer):
             # Show if defaults were auto-computed
             quad_note = "" if self._n_quadrature_user is not None else " (auto)"
             samp_note = "" if self._n_samples_user is not None else " (auto)"
-            print(f"  n={n}, n_quadrature={self.n_quadrature}{quad_note}, n_samples={self.n_samples}{samp_note}")
+            print(
+                f"  n={n}, n_quadrature={self.n_quadrature}{quad_note}, n_samples={self.n_samples}{samp_note}"
+            )
             if self.use_leverage:
                 print(f"  use_leverage=True, sampling_method={self.sampling_method}")
                 print(f"  leverage_type={self.leverage_type}")
@@ -869,11 +876,13 @@ class MultilinearExplainer(Explainer):
                 print(f"  use_leverage=False")
 
         # Always use sampled method (for exact computation, use ExactExplainer)
-        shapley_array, total_variance = self._compute_shapley_sampled(cached_char_func, n)
+        shapley_array, total_variance = self._compute_shapley_sampled(
+            cached_char_func, n
+        )
         if self.use_leverage:
-            self.method_used_ = f'leverage_{self.sampling_method}_{self.leverage_type}'
+            self.method_used_ = f"leverage_{self.sampling_method}_{self.leverage_type}"
         else:
-            self.method_used_ = 'naive_sampling'
+            self.method_used_ = "naive_sampling"
 
         self.computation_time_ = time.time() - start_time
 
@@ -886,7 +895,7 @@ class MultilinearExplainer(Explainer):
             self.error_bounds_ = error_computer.compute_bounds(
                 observed_variance=avg_variance,
                 fourth_derivative_bound=1.0,
-                leverage_efficiency=self.leverage_efficiency_
+                leverage_efficiency=self.leverage_efficiency_,
             )
 
         # Convert to dictionary with feature names
@@ -910,8 +919,10 @@ class MultilinearExplainer(Explainer):
                         pct = count / total_samples * 100
                         print(f"    size {size}: {count} ({pct:.1f}%)")
             if self.error_bounds_:
-                print(f"  Error bound: {self.error_bounds_.total_error:.2e} "
-                      f"(conf={self.error_bounds_.confidence_level:.0%})")
+                print(
+                    f"  Error bound: {self.error_bounds_.total_error:.2e} "
+                    f"(conf={self.error_bounds_.confidence_level:.0%})"
+                )
 
         return self.shapley_values_
 
@@ -920,9 +931,7 @@ class MultilinearExplainer(Explainer):
     # =========================================================================
 
     def _compute_shapley_sampled(
-        self,
-        char_func: Callable[[Set[int]], float],
-        n: int
+        self, char_func: Callable[[Set[int]], float], n: int
     ) -> Tuple[np.ndarray, float]:
         """
         Compute Shapley values via sampled partial derivative integration.
@@ -936,7 +945,9 @@ class MultilinearExplainer(Explainer):
             (shapley_values, total_variance)
         """
         # Initialize helpers
-        leverage_computer = _LeverageScoreComputer(n, self.leverage_type, self.tilt_by_bernoulli)
+        leverage_computer = _LeverageScoreComputer(
+            n, self.leverage_type, self.tilt_by_bernoulli
+        )
         sampler = _StratifiedCoalitionSampler(leverage_computer, self._rng)
 
         if self.use_leverage:
@@ -953,12 +964,15 @@ class MultilinearExplainer(Explainer):
 
         # Store allocation for reporting
         self.quadrature_allocation_ = {
-            t_values[k]: int(quad_allocations[k]) for k in range(len(t_values))
+            t_values[k]: int(quad_allocations[k])
+            for k in range(len(t_values))
             if quad_allocations[k] > 0 or is_exact[k]
         }
 
         if self.verbose:
-            print(f"  Adaptive allocation across {self.n_quadrature} quadrature points:")
+            print(
+                f"  Adaptive allocation across {self.n_quadrature} quadrature points:"
+            )
             exact_count = sum(is_exact)
             sample_count = self.n_quadrature - exact_count
             print(f"    Exact computation: {exact_count} points (t=0, t=1)")
@@ -994,11 +1008,7 @@ class MultilinearExplainer(Explainer):
         return shapley_values, total_variance
 
     def _compute_exact_at_t(
-        self,
-        char_func: Callable[[Set[int]], float],
-        player: int,
-        t: float,
-        n: int
+        self, char_func: Callable[[Set[int]], float], player: int, t: float, n: int
     ) -> Tuple[float, float]:
         """
         Compute exact partial derivative at t=0 or t=1.
@@ -1031,7 +1041,7 @@ class MultilinearExplainer(Explainer):
         sampler: _StratifiedCoalitionSampler,
         player: int,
         t: float,
-        n_samples: int
+        n_samples: int,
     ) -> Tuple[float, float]:
         """
         Estimate f_i(t,...,t) = E_{S~Bernoulli(t)}[v(S∪{i}) - v(S)].
@@ -1076,7 +1086,7 @@ class MultilinearExplainer(Explainer):
 
         # Variance estimate for error bounds
         if len(marginals) > 1:
-            variance = np.average((marginals - estimate)**2, weights=weights)
+            variance = np.average((marginals - estimate) ** 2, weights=weights)
         else:
             variance = 0.0
 
@@ -1097,21 +1107,21 @@ class MultilinearExplainer(Explainer):
             return {}
 
         stats = {
-            'n_features': self.n_features_,
-            'n_quadrature': self.n_quadrature,
-            'n_samples': self.n_samples,
-            'method_used': self.method_used_,
-            'use_leverage': self.use_leverage,
-            'computation_time': self.computation_time_,
-            'n_char_func_calls': self.n_char_func_calls_,
+            "n_features": self.n_features_,
+            "n_quadrature": self.n_quadrature,
+            "n_samples": self.n_samples,
+            "method_used": self.method_used_,
+            "use_leverage": self.use_leverage,
+            "computation_time": self.computation_time_,
+            "n_char_func_calls": self.n_char_func_calls_,
         }
 
         if self.use_leverage:
-            stats['sampling_method'] = self.sampling_method
-            stats['leverage_type'] = self.leverage_type
+            stats["sampling_method"] = self.sampling_method
+            stats["leverage_type"] = self.leverage_type
             if self.sampling_method == "stratified":
-                stats['tilt_by_bernoulli'] = self.tilt_by_bernoulli
-            stats['leverage_efficiency'] = self.leverage_efficiency_
+                stats["tilt_by_bernoulli"] = self.tilt_by_bernoulli
+            stats["leverage_efficiency"] = self.leverage_efficiency_
 
         return stats
 

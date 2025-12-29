@@ -30,7 +30,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
         auto_adapt: bool = True,
         parallel: bool = True,
         max_workers: Optional[int] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """Initialize improved Block QR-CS explainer.
 
@@ -54,10 +54,12 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
             block_sizes=block_sizes,
             n_measurements_per_block=n_measurements_per_block,
             tolerance=tolerance,
-            use_fast_fallback=use_fast_fallback if use_fast_fallback is not None else False,
+            use_fast_fallback=(
+                use_fast_fallback if use_fast_fallback is not None else False
+            ),
             parallel=parallel,
             max_workers=max_workers,
-            verbose=verbose
+            verbose=verbose,
         )
         self.sparsity_threshold = sparsity_threshold
         self.auto_adapt = auto_adapt
@@ -65,10 +67,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
         self._block_methods = {}
 
     def _check_block_sparsity(
-        self,
-        block_idx: int,
-        utility_func: Callable,
-        sample_size: int = 30
+        self, block_idx: int, utility_func: Callable, sample_size: int = 30
     ) -> float:
         """Check if marginal contributions in a block are sparse.
 
@@ -87,9 +86,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
         # Sample marginal contributions for first player in this block
         player = 0
         sample_indices = np.random.choice(
-            range(start, min(end, start + sample_size)),
-            size=sample_size,
-            replace=False
+            range(start, min(end, start + sample_size)), size=sample_size, replace=False
         )
 
         marginal_contribs = []
@@ -100,7 +97,11 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
             player_set_with = player_set | {self.player_ids[player]}
 
             v_with = self.characteristic_function(player_set_with, self._context)
-            v_without = self.characteristic_function(player_set, self._context) if player_set else 0
+            v_without = (
+                self.characteristic_function(player_set, self._context)
+                if player_set
+                else 0
+            )
             marginal_contribs.append(v_with - v_without)
 
         if len(marginal_contribs) == 0:
@@ -121,9 +122,7 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
         return sparsity
 
     def _compute_single_block(
-        self,
-        block_idx: int,
-        utility_func: Callable
+        self, block_idx: int, utility_func: Callable
     ) -> Dict[int, float]:
         """Compute Shapley values for a single block with adaptive method.
 
@@ -138,23 +137,25 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
 
             if sparsity < self.sparsity_threshold:
                 use_fast_for_block = True
-                self._block_methods[block_idx] = 'Fast Fallback'
+                self._block_methods[block_idx] = "Fast Fallback"
                 if self.verbose:
-                    print(f"  Block {block_idx}: Sparsity {100*sparsity:.1f}% < {100*self.sparsity_threshold:.1f}%, using fast fallback")
+                    print(
+                        f"  Block {block_idx}: Sparsity {100*sparsity:.1f}% < {100*self.sparsity_threshold:.1f}%, using fast fallback"
+                    )
             else:
                 use_fast_for_block = False
-                self._block_methods[block_idx] = 'Compressed Sensing'
+                self._block_methods[block_idx] = "Compressed Sensing"
                 if self.verbose:
-                    print(f"  Block {block_idx}: Sparsity {100*sparsity:.1f}% >= {100*self.sparsity_threshold:.1f}%, using CS")
+                    print(
+                        f"  Block {block_idx}: Sparsity {100*sparsity:.1f}% >= {100*self.sparsity_threshold:.1f}%, using CS"
+                    )
         elif block_idx in self._block_sparsities:
             # Use cached decision
-            use_fast_for_block = (self._block_methods[block_idx] == 'Fast Fallback')
+            use_fast_for_block = self._block_methods[block_idx] == "Fast Fallback"
 
         # Delegate to parent with explicit override to avoid shared-state races
         return super()._compute_single_block(
-            block_idx,
-            utility_func,
-            use_fast_override=use_fast_for_block
+            block_idx, utility_func, use_fast_override=use_fast_for_block
         )
 
     def get_block_sparsity_info(self) -> Dict[str, Any]:
@@ -165,23 +166,23 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
         """
         if not self._block_sparsities:
             return {
-                'message': 'No sparsity detection performed yet',
-                'auto_adapt': self.auto_adapt
+                "message": "No sparsity detection performed yet",
+                "auto_adapt": self.auto_adapt,
             }
 
         sparsities = list(self._block_sparsities.values())
         methods = list(self._block_methods.values())
 
         return {
-            'n_blocks': self.n_blocks,
-            'block_sparsities': self._block_sparsities,
-            'block_methods': self._block_methods,
-            'avg_sparsity': np.mean(sparsities) if sparsities else 0,
-            'min_sparsity': np.min(sparsities) if sparsities else 0,
-            'max_sparsity': np.max(sparsities) if sparsities else 0,
-            'threshold': self.sparsity_threshold,
-            'blocks_using_cs': sum(1 for m in methods if m == 'Compressed Sensing'),
-            'blocks_using_fast': sum(1 for m in methods if m == 'Fast Fallback')
+            "n_blocks": self.n_blocks,
+            "block_sparsities": self._block_sparsities,
+            "block_methods": self._block_methods,
+            "avg_sparsity": np.mean(sparsities) if sparsities else 0,
+            "min_sparsity": np.min(sparsities) if sparsities else 0,
+            "max_sparsity": np.max(sparsities) if sparsities else 0,
+            "threshold": self.sparsity_threshold,
+            "blocks_using_cs": sum(1 for m in methods if m == "Compressed Sensing"),
+            "blocks_using_fast": sum(1 for m in methods if m == "Fast Fallback"),
         }
 
     def _compute_shapley_blocks(self, utility_func: Callable) -> Dict[int, float]:
@@ -190,10 +191,12 @@ class ImprovedBlockQRCSExplainer(BlockQRCSExplainer):
 
         if self.verbose and self.auto_adapt:
             info = self.get_block_sparsity_info()
-            if 'avg_sparsity' in info:
+            if "avg_sparsity" in info:
                 print(f"\nBlock sparsity summary:")
                 print(f"  Average sparsity: {info['avg_sparsity']*100:.1f}%")
                 print(f"  Blocks using CS: {info['blocks_using_cs']}/{self.n_blocks}")
-                print(f"  Blocks using fast fallback: {info['blocks_using_fast']}/{self.n_blocks}")
+                print(
+                    f"  Blocks using fast fallback: {info['blocks_using_fast']}/{self.n_blocks}"
+                )
 
         return result

@@ -16,7 +16,7 @@ from shapG import (
     cis,
     graph_generator,
     get_reachable_nodes_at_depth,
-    plot
+    plot,
 )
 
 
@@ -41,8 +41,8 @@ class TestBackwardCompatibility(unittest.TestCase):
 
         # Check edges have weights
         for u, v, data in G.edges(data=True):
-            if 'weight' in data:
-                self.assertTrue(1 <= data['weight'] <= 5)
+            if "weight" in data:
+                self.assertTrue(1 <= data["weight"] <= 5)
 
     def test_coalition_degree(self):
         """Test coalition degree function."""
@@ -81,6 +81,7 @@ class TestBackwardCompatibility(unittest.TestCase):
 
     def test_shapley_value_with_custom_function(self):
         """Test Shapley value with custom characteristic function."""
+
         def custom_f(G, S):
             return len(S) * 2
 
@@ -128,6 +129,7 @@ class TestBackwardCompatibility(unittest.TestCase):
 
     def test_shapG_with_custom_function(self):
         """Test ShapG with custom characteristic function."""
+
         def custom_f(G, S):
             return float(len(S))
 
@@ -148,6 +150,7 @@ class TestBackwardCompatibility(unittest.TestCase):
 
     def test_cis_with_custom_function(self):
         """Test CIS with custom function."""
+
         def custom_f(G, S):
             return len(S) ** 2
 
@@ -183,12 +186,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         self.assertIsNotNone(ax)
 
         # Test with feature names
-        result = plot(
-            values,
-            feature_names=['A', 'B', 'C'],
-            top_n=2,
-            show_plot=False
-        )
+        result = plot(values, feature_names=["A", "B", "C"], top_n=2, show_plot=False)
         self.assertIsNotNone(result)
 
     def test_consistency_between_apis(self):
@@ -231,7 +229,8 @@ class TestDeprecationWarnings(unittest.TestCase):
 
             # No deprecation warnings should be raised yet
             deprecation_warnings = [
-                warning for warning in w
+                warning
+                for warning in w
                 if issubclass(warning.category, (DeprecationWarning, FutureWarning))
             ]
             # With deprecation warnings now implemented, expect warnings
@@ -275,5 +274,5 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(len(values), 4)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

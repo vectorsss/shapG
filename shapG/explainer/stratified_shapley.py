@@ -33,6 +33,7 @@ from scipy.fft import dct, idct
 
 try:
     import cvxpy as cp
+
     CVXPY_AVAILABLE = True
 except ImportError:
     CVXPY_AVAILABLE = False
@@ -45,9 +46,11 @@ from ..characteristic.characteristic_functions import CoalitionDegree
 # Data Classes
 # =============================================================================
 
+
 @dataclass
 class SamplingStats:
     """Statistics about the stratified sampling process."""
+
     n_players: int
     total_budget: int
     allocations_by_size: np.ndarray
@@ -68,6 +71,7 @@ class SamplingStats:
 # =============================================================================
 # Stratified Coalition Sampler
 # =============================================================================
+
 
 class StratifiedCoalitionSampler:
     """
@@ -98,8 +102,8 @@ class StratifiedCoalitionSampler:
         self,
         n: int,
         budget: int,
-        allocation_strategy: str = 'shapley_weighted',
-        seed: Optional[int] = None
+        allocation_strategy: str = "shapley_weighted",
+        seed: Optional[int] = None,
     ):
         if n <= 0:
             raise ValueError(f"n must be positive, got {n}")
@@ -115,7 +119,7 @@ class StratifiedCoalitionSampler:
         self._precompute()
 
         # Compute allocation (skip for leverage_bernoulli, handled during sampling)
-        if allocation_strategy != 'leverage_bernoulli':
+        if allocation_strategy != "leverage_bernoulli":
             self.allocations = self._compute_allocations()
         else:
             self.allocations = None  # Will be computed dynamically
@@ -138,9 +142,9 @@ class StratifiedCoalitionSampler:
             )
 
         # Number of coalitions of each size (for a single player, n-1 others)
-        self.n_coalitions_by_size = np.array([
-            comb(n - 1, s, exact=True) for s in range(n)
-        ])
+        self.n_coalitions_by_size = np.array(
+            [comb(n - 1, s, exact=True) for s in range(n)]
+        )
 
         # Total coalitions
         self.total_coalitions = 2 ** (n - 1)
@@ -149,7 +153,7 @@ class StratifiedCoalitionSampler:
         """Compute sample allocation across strata."""
         n = self.n
 
-        if self.allocation_strategy == 'shapley_weighted':
+        if self.allocation_strategy == "shapley_weighted":
             # Importance = Shapley weight × number of coalitions of that size
             importance = self.shapley_weights * self.n_coalitions_by_size
             importance_sum = importance.sum()
@@ -158,11 +162,11 @@ class StratifiedCoalitionSampler:
             else:
                 importance = np.ones(n) / n
 
-        elif self.allocation_strategy == 'uniform':
+        elif self.allocation_strategy == "uniform":
             # Equal allocation per stratum
             importance = np.ones(n) / n
 
-        elif self.allocation_strategy == 'leverage':
+        elif self.allocation_strategy == "leverage":
             # Leverage score based allocation (inverse of coalition count)
             leverage = np.zeros(n)
             for s in range(n):
@@ -174,7 +178,7 @@ class StratifiedCoalitionSampler:
             else:
                 importance = np.ones(n) / n
 
-        elif self.allocation_strategy == 'leverage_bernoulli':
+        elif self.allocation_strategy == "leverage_bernoulli":
             # Bernoulli sampling - allocations computed dynamically
             # This is a placeholder, actual sampling happens in sample_all_strata_bernoulli
             return np.zeros(n, dtype=int)
@@ -201,8 +205,7 @@ class StratifiedCoalitionSampler:
                     break
                 # How many more can we add to this stratum?
                 can_add = min(
-                    remaining,
-                    self.n_coalitions_by_size[idx] - allocations[idx]
+                    remaining, self.n_coalitions_by_size[idx] - allocations[idx]
                 )
                 allocations[idx] += can_add
                 remaining -= can_add
@@ -255,6 +258,7 @@ class StratifiedCoalitionSampler:
         float
             Oversampling parameter c
         """
+
         def expected_pairs(c):
             """Expected number of coalition pairs sampled."""
             total = 0
@@ -290,8 +294,7 @@ class StratifiedCoalitionSampler:
         return c_mid
 
     def sample_all_strata_bernoulli(
-        self,
-        player: int
+        self, player: int
     ) -> Tuple[List[Set[int]], np.ndarray, np.ndarray]:
         """
         Sample coalitions using Bernoulli sampling with leverage scores.
@@ -352,7 +355,7 @@ class StratifiedCoalitionSampler:
                 continue
 
             # Check if this is the middle size (when s == n_others - s)
-            is_middle_size = (s == n_others - s)
+            is_middle_size = s == n_others - s
 
             # Bernoulli sampling: random number of coalitions
             n_samples = self.rng.binomial(n_total, prob)
@@ -379,7 +382,9 @@ class StratifiedCoalitionSampler:
                 # Non-middle size: use paired sampling for variance reduction
                 # Compute weight for complement coalitions
                 complement_size = n_others - s
-                leverage_score_complement = self._compute_leverage_score(complement_size, n_others)
+                leverage_score_complement = self._compute_leverage_score(
+                    complement_size, n_others
+                )
                 prob_complement = min(1.0, 2 * c * leverage_score_complement)
                 if prob_complement > 0:
                     importance_weight_complement = 1.0 / prob_complement
@@ -411,7 +416,9 @@ class StratifiedCoalitionSampler:
 
         return coalitions, np.array(sizes), np.array(weights)
 
-    def sample_all_strata(self, player: int) -> Tuple[List[Set[int]], np.ndarray, np.ndarray]:
+    def sample_all_strata(
+        self, player: int
+    ) -> Tuple[List[Set[int]], np.ndarray, np.ndarray]:
         """
         Sample coalitions from all strata for a given player.
 
@@ -450,6 +457,7 @@ class StratifiedCoalitionSampler:
             if n_samples >= n_total:
                 # Exact enumeration for this stratum
                 from itertools import combinations
+
                 for combo in combinations(other_players, size):
                     coalitions.append(set(combo))
                     sizes.append(size)
@@ -458,7 +466,9 @@ class StratifiedCoalitionSampler:
                     actual_samples[size] += 1
             else:
                 # Random sampling without replacement
-                sampled = self._sample_coalitions_of_size(other_players, size, n_samples)
+                sampled = self._sample_coalitions_of_size(
+                    other_players, size, n_samples
+                )
                 for coalition in sampled:
                     coalitions.append(coalition)
                     sizes.append(size)
@@ -476,10 +486,7 @@ class StratifiedCoalitionSampler:
         return coalitions, np.array(sizes), np.array(weights)
 
     def _sample_coalitions_of_size(
-        self,
-        players: List[int],
-        size: int,
-        n_samples: int
+        self, players: List[int], size: int, n_samples: int
     ) -> List[Set[int]]:
         """Sample n_samples coalitions of given size from players."""
         if size == 0:
@@ -510,7 +517,7 @@ class StratifiedCoalitionSampler:
             warnings.warn(
                 f"Could only sample {len(sampled)} unique coalitions of size {size}, "
                 f"requested {n_samples}",
-                RuntimeWarning
+                RuntimeWarning,
             )
 
         return sampled
@@ -534,7 +541,7 @@ class StratifiedCoalitionSampler:
                 total_budget=self.budget,
                 allocations_by_size=actual_samples,  # Use actual samples as "allocation"
                 actual_samples_by_size=actual_samples,
-                coverage_by_size=coverage
+                coverage_by_size=coverage,
             )
 
         # Use accumulated actual samples if available, otherwise use allocations
@@ -552,13 +559,14 @@ class StratifiedCoalitionSampler:
             total_budget=self.budget,
             allocations_by_size=self.allocations,
             actual_samples_by_size=actual_samples,
-            coverage_by_size=coverage
+            coverage_by_size=coverage,
         )
 
 
 # =============================================================================
 # Implicit DCT Operator for Large Spaces
 # =============================================================================
+
 
 class ImplicitDCTOperator:
     """
@@ -595,7 +603,7 @@ class ImplicitDCTOperator:
             Measurements at sampled indices (len(sampled_indices),)
         """
         # Fast IDCT: O(N log N) instead of O(N^2)
-        u_full = idct(s, norm='ortho')
+        u_full = idct(s, norm="ortho")
         # Select sampled indices
         return u_full[self.sampled_indices]
 
@@ -617,7 +625,7 @@ class ImplicitDCTOperator:
         u_full = np.zeros(self.full_size)
         u_full[self.sampled_indices] = y
         # Fast DCT: O(N log N)
-        return dct(u_full, norm='ortho')
+        return dct(u_full, norm="ortho")
 
     def __matmul__(self, s: np.ndarray) -> np.ndarray:
         """Matrix multiplication operator."""
@@ -627,6 +635,7 @@ class ImplicitDCTOperator:
 # =============================================================================
 # L1 Minimization Solver
 # =============================================================================
+
 
 class L1Solver:
     """
@@ -681,7 +690,7 @@ class L1Solver:
             prob = cp.Problem(objective, constraints)
             prob.solve(solver=cp.ECOS, max_iters=self.max_iter)
 
-            if prob.status in ['optimal', 'optimal_inaccurate']:
+            if prob.status in ["optimal", "optimal_inaccurate"]:
                 return x.value
             else:
                 # Fall back to least squares
@@ -690,7 +699,7 @@ class L1Solver:
         except Exception as e:
             warnings.warn(
                 f"CVXPY solver failed: {e}. Falling back to least squares.",
-                RuntimeWarning
+                RuntimeWarning,
             )
             return np.linalg.lstsq(A, b, rcond=None)[0]
 
@@ -710,19 +719,21 @@ class L1Solver:
         def constraint(x):
             return self.tolerance - np.linalg.norm(A @ x - b)
 
-        constraints = {'type': 'ineq', 'fun': constraint}
+        constraints = {"type": "ineq", "fun": constraint}
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = minimize(
-                objective, x0, method='SLSQP',
+                objective,
+                x0,
+                method="SLSQP",
                 constraints=constraints,
-                options={'maxiter': self.max_iter, 'ftol': 1e-6}
+                options={"maxiter": self.max_iter, "ftol": 1e-6},
             )
 
         return result.x if result.success else x0
 
-    def _solve_implicit(self, A: 'ImplicitDCTOperator', b: np.ndarray) -> np.ndarray:
+    def _solve_implicit(self, A: "ImplicitDCTOperator", b: np.ndarray) -> np.ndarray:
         """
         Solve L1 minimization for implicit DCT operator.
 
@@ -733,7 +744,9 @@ class L1Solver:
         # Use ISTA for implicit operators (can't materialize matrix for cvxpy)
         return self._ista(A, b)
 
-    def _ista(self, A: 'ImplicitDCTOperator', b: np.ndarray, lam: float = None) -> np.ndarray:
+    def _ista(
+        self, A: "ImplicitDCTOperator", b: np.ndarray, lam: float = None
+    ) -> np.ndarray:
         """
         Fast Iterative Soft Thresholding Algorithm (FISTA) for L1 minimization.
 
@@ -805,6 +818,7 @@ class L1Solver:
 # Main Explainer Class
 # =============================================================================
 
+
 class StratifiedShapleyExplainer(Explainer):
     """
     Random Projection QRCS Shapley value explainer.
@@ -872,11 +886,11 @@ class StratifiedShapleyExplainer(Explainer):
         self,
         characteristic_function: Optional[CharacteristicFunction] = None,
         n_samples: int = 5000,
-        allocation_strategy: str = 'shapley_weighted',
+        allocation_strategy: str = "shapley_weighted",
         tolerance: float = 1e-4,
         use_direct_estimation: bool = True,
         seed: Optional[int] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         super().__init__(characteristic_function or CoalitionDegree(), verbose)
 
@@ -896,7 +910,7 @@ class StratifiedShapleyExplainer(Explainer):
     def _parse_input(
         self,
         X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
-        context: Optional[Any] = None
+        context: Optional[Any] = None,
     ) -> Tuple[int, List, Any]:
         """Parse input to extract player count, identifiers, and context.
 
@@ -951,8 +965,8 @@ class StratifiedShapleyExplainer(Explainer):
         self,
         X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
         context: Optional[Any] = None,
-        **kwargs
-    ) -> 'StratifiedShapleyExplainer':
+        **kwargs,
+    ) -> "StratifiedShapleyExplainer":
         """
         Fit the explainer to data.
 
@@ -980,7 +994,7 @@ class StratifiedShapleyExplainer(Explainer):
             n=self.n,
             budget=self.n_samples,
             allocation_strategy=self.allocation_strategy,
-            seed=self.seed
+            seed=self.seed,
         )
 
         if self.verbose:
@@ -1004,7 +1018,7 @@ class StratifiedShapleyExplainer(Explainer):
         self,
         X: Optional[Union[int, np.ndarray, pd.DataFrame, nx.Graph, List]] = None,
         context: Optional[Any] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict:
         """
         Compute Shapley values using RP-QRCS.
@@ -1036,11 +1050,15 @@ class StratifiedShapleyExplainer(Explainer):
         shapley_indices = self._compute_shapley(utility_func)
 
         # Map back to player identifiers
-        shapley_values = {self.player_ids[i]: value for i, value in shapley_indices.items()}
+        shapley_values = {
+            self.player_ids[i]: value for i, value in shapley_indices.items()
+        }
 
         return shapley_values
 
-    def _compute_shapley(self, utility_func: Callable[[Set[int]], float]) -> Dict[int, float]:
+    def _compute_shapley(
+        self, utility_func: Callable[[Set[int]], float]
+    ) -> Dict[int, float]:
         """
         Compute Shapley values using RP-QRCS algorithm.
 
@@ -1062,15 +1080,23 @@ class StratifiedShapleyExplainer(Explainer):
                 print(f"Computing Shapley value for player {player + 1}/{self.n}")
 
             # Step 1: Sample coalitions using stratified sampling
-            if self.allocation_strategy == 'leverage_bernoulli':
-                coalitions, sizes, weights = self._sampler.sample_all_strata_bernoulli(player)
+            if self.allocation_strategy == "leverage_bernoulli":
+                coalitions, sizes, weights = self._sampler.sample_all_strata_bernoulli(
+                    player
+                )
 
                 # Print actual allocation after first player's sampling
-                if player == 0 and self.verbose and self._sampler._actual_samples_by_size is not None:
+                if (
+                    player == 0
+                    and self.verbose
+                    and self._sampler._actual_samples_by_size is not None
+                ):
                     print(f"\nActual sampling allocation (leverage_bernoulli):")
                     for s in range(self.n):
                         if self._sampler._actual_samples_by_size[s] > 0:
-                            print(f"    size {s}: {int(self._sampler._actual_samples_by_size[s])} samples")
+                            print(
+                                f"    size {s}: {int(self._sampler._actual_samples_by_size[s])} samples"
+                            )
                     print()
             else:
                 coalitions, sizes, weights = self._sampler.sample_all_strata(player)
@@ -1094,7 +1120,7 @@ class StratifiedShapleyExplainer(Explainer):
                 # Therefore, the weighted mean simplifies to the simple mean
                 shapley_value = 0.0
                 for size in range(self.n):
-                    mask = (sizes == size)
+                    mask = sizes == size
                     if not np.any(mask):
                         continue
 
@@ -1128,7 +1154,7 @@ class StratifiedShapleyExplainer(Explainer):
         coalitions: List[Set[int]],
         player: int,
         utility_func: Callable[[Set[int]], float],
-        l1_solver: L1Solver
+        l1_solver: L1Solver,
     ) -> float:
         """
         Compute Shapley value using compressed sensing with implicit DCT.
@@ -1161,7 +1187,7 @@ class StratifiedShapleyExplainer(Explainer):
 
         if self.verbose:
             n_bits = self.n - 1
-            full_size = 2 ** n_bits
+            full_size = 2**n_bits
             print(f"  [CS] Full space: 2^{n_bits} = {full_size}")
             print(f"  [CS] Sampled: {m} coalitions ({100*m/full_size:.4f}%)")
             print(f"  [CS] Using budget-based stratified CS (O(m) space)")
@@ -1173,14 +1199,14 @@ class StratifiedShapleyExplainer(Explainer):
         except Exception as e:
             warnings.warn(
                 f"CS reconstruction failed: {e}. Falling back to direct estimation.",
-                RuntimeWarning
+                RuntimeWarning,
             )
-            return self._compute_direct_from_coalitions(coalitions, player, utility_func)
+            return self._compute_direct_from_coalitions(
+                coalitions, player, utility_func
+            )
 
     def _compute_cs_oversampling_factors(
-        self,
-        allocations: np.ndarray,
-        base_oversampling: int = 4
+        self, allocations: np.ndarray, base_oversampling: int = 4
     ) -> np.ndarray:
         """
         Compute per-stratum oversampling factors for budget-based CS.
@@ -1237,7 +1263,7 @@ class StratifiedShapleyExplainer(Explainer):
         player: int,
         utility_func: Callable[[Set[int]], float],
         l1_solver: L1Solver,
-        base_oversampling: int = 4
+        base_oversampling: int = 4,
     ) -> float:
         """
         Budget-based CS with stratified one-to-one mapping.
@@ -1296,7 +1322,9 @@ class StratifiedShapleyExplainer(Explainer):
         # Step 4: Compute stratum offsets in reconstruction space
         recon_offsets = np.zeros(self.n + 1, dtype=int)
         for s in range(self.n):
-            recon_offsets[s + 1] = recon_offsets[s] + oversampling_factors[s] * allocations[s]
+            recon_offsets[s + 1] = (
+                recon_offsets[s] + oversampling_factors[s] * allocations[s]
+            )
 
         recon_size = recon_offsets[-1]
 
@@ -1307,12 +1335,16 @@ class StratifiedShapleyExplainer(Explainer):
 
         if self.verbose:
             print(f"  [CS-Stratified] m={m}, recon_size={recon_size_padded}")
-            print(f"  [CS-Stratified] Exhaustive strata: {n_exhaustive}, "
-                  f"Partial strata: {n_partial}")
+            print(
+                f"  [CS-Stratified] Exhaustive strata: {n_exhaustive}, "
+                f"Partial strata: {n_partial}"
+            )
             # Show range of oversampling factors used
             unique_factors = np.unique(oversampling_factors[oversampling_factors > 1])
             if len(unique_factors) > 0:
-                print(f"  [CS-Stratified] Oversampling factors: {unique_factors.tolist()}")
+                print(
+                    f"  [CS-Stratified] Oversampling factors: {unique_factors.tolist()}"
+                )
 
         # Step 5: Create one-to-one mapping and pre-compute Shapley weights
         # Within each stratum: position j -> offset + j * stride
@@ -1328,8 +1360,11 @@ class StratifiedShapleyExplainer(Explainer):
             sampled_indices[j] = recon_offsets[s] + within_stratum_counter[s] * stride
             within_stratum_counter[s] += 1
             # Pre-compute weight: w_s * N_s / a_s
-            recon_weights[j] = (self._sampler.shapley_weights[s] *
-                                self._sampler.n_coalitions_by_size[s] / allocations[s])
+            recon_weights[j] = (
+                self._sampler.shapley_weights[s]
+                * self._sampler.n_coalitions_by_size[s]
+                / allocations[s]
+            )
 
         # Step 6: Create implicit DCT operator in budget-based space
         A = ImplicitDCTOperator(sampled_indices, recon_size_padded)
@@ -1344,7 +1379,7 @@ class StratifiedShapleyExplainer(Explainer):
                 print(f"  [CS-Stratified] DCT sparsity: {sparsity*100:.1f}%")
 
             # Step 8: Reconstruct signal
-            u_hat = idct(s_hat, norm='ortho')
+            u_hat = idct(s_hat, norm="ortho")
 
             # Step 9: Compute Shapley value via dot product with pre-computed weights
             # φ = Σ_j recon_weights[j] * u_hat[sampled_indices[j]]
@@ -1355,15 +1390,17 @@ class StratifiedShapleyExplainer(Explainer):
         except Exception as e:
             warnings.warn(
                 f"Stratified CS failed: {e}. Falling back to direct estimation.",
-                RuntimeWarning
+                RuntimeWarning,
             )
-            return self._compute_direct_from_coalitions(coalitions, player, utility_func)
+            return self._compute_direct_from_coalitions(
+                coalitions, player, utility_func
+            )
 
     def _compute_direct_from_coalitions(
         self,
         coalitions: List[Set[int]],
         player: int,
-        utility_func: Callable[[Set[int]], float]
+        utility_func: Callable[[Set[int]], float],
     ) -> float:
         """
         Compute Shapley value using direct estimation from sampled coalitions.
@@ -1403,7 +1440,7 @@ class StratifiedShapleyExplainer(Explainer):
         # Direct estimation using stratified sampling formula
         shapley_value = 0.0
         for size in range(self.n):
-            mask = (sizes == size)
+            mask = sizes == size
             if not np.any(mask):
                 continue
 

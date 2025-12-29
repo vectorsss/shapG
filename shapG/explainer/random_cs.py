@@ -12,8 +12,10 @@ import pandas as pd
 import networkx as nx
 import random
 import warnings
+
 try:
     import cvxpy as cp
+
     CVXPY_AVAILABLE = True
 except ImportError:
     CVXPY_AVAILABLE = False
@@ -41,10 +43,10 @@ class RandomCSExplainer(GraphExplainer):
         self,
         characteristic_function: Optional[CharacteristicFunction] = None,
         m: int = 100,  # Number of measurements per iteration
-        t: int = 50,   # Number of iterations
+        t: int = 50,  # Number of iterations
         tolerance: float = 1e-3,
         verbose: bool = False,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
     ):
         """Initialize Random CS explainer.
 
@@ -72,7 +74,9 @@ class RandomCSExplainer(GraphExplainer):
             np.random.seed(seed)
             random.seed(seed)
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'RandomCSExplainer':
+    def fit(
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs
+    ) -> "RandomCSExplainer":
         """Fit the explainer to data.
 
         Args:
@@ -100,9 +104,7 @@ class RandomCSExplainer(GraphExplainer):
         return self
 
     def explain(
-        self,
-        X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
-        **kwargs
+        self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
     ) -> Dict[int, float]:
         """Compute Random CS Shapley values.
 
@@ -141,7 +143,9 @@ class RandomCSExplainer(GraphExplainer):
         sp[sp == 0] = -1.0 / np.sqrt(m)
         return sp
 
-    def _random_coalition(self, available_players: list, size: Optional[int] = None) -> set:
+    def _random_coalition(
+        self, available_players: list, size: Optional[int] = None
+    ) -> set:
         """Generate a random coalition of players.
 
         Args:
@@ -187,7 +191,9 @@ class RandomCSExplainer(GraphExplainer):
                 print(f"Random CS iteration {iteration + 1}/{self.t}")
 
             # Sample a random coalition (matching paper's approach)
-            coalition_size = np.random.randint(1, self.n + 1)  # Note: starts from 1, not 0
+            coalition_size = np.random.randint(
+                1, self.n + 1
+            )  # Note: starts from 1, not 0
             row_idx = self._random_coalition(list(range(self.n)), coalition_size)
 
             # Compute marginal contributions for all players
@@ -218,7 +224,7 @@ class RandomCSExplainer(GraphExplainer):
             y[iteration] = y_m
 
         # Average the measurements (matching paper's approach)
-        y_bar = np.sum(np.array(list(y.values())).T, axis=1) * (1/self.t)
+        y_bar = np.sum(np.array(list(y.values())).T, axis=1) * (1 / self.t)
 
         # Compute s_bar (matching paper)
         s_bar = utility_func(set(range(self.n))) / self.n
@@ -230,7 +236,9 @@ class RandomCSExplainer(GraphExplainer):
                 x_l1 = cp.Variable(shape=(self.n, 1))
 
                 # Create constraint (matching paper)
-                constraints = [cp.norm(A @ (s_bar + x_l1) - y_bar[:, np.newaxis]) <= self.tolerance]
+                constraints = [
+                    cp.norm(A @ (s_bar + x_l1) - y_bar[:, np.newaxis]) <= self.tolerance
+                ]
 
                 # Form objective (matching paper)
                 obj = cp.Minimize(cp.norm(x_l1, 1))
@@ -239,7 +247,7 @@ class RandomCSExplainer(GraphExplainer):
                 prob = cp.Problem(obj, constraints)
                 prob.solve()
 
-                if prob.status in ['optimal', 'optimal_inaccurate']:
+                if prob.status in ["optimal", "optimal_inaccurate"]:
                     # Compute final result (matching paper: CS_res = s_bar + x_l1.value)
                     CS_res = s_bar + x_l1.value.flatten()
                     shapley_values = {i: CS_res[i] for i in range(self.n)}
@@ -262,7 +270,7 @@ class RandomCSExplainer(GraphExplainer):
         # Report statistics if verbose
         if self.verbose:
             unique_requests = len(set(map(tuple, map(sorted, requests))))
-            total_possible = 2 ** self.n - 1
+            total_possible = 2**self.n - 1
             print(f"Used coalitions: {unique_requests}")
             print(f"Total possible: {total_possible}")
             print(f"Coverage: {100 * unique_requests / total_possible:.2f}%")
@@ -273,7 +281,7 @@ class RandomCSExplainer(GraphExplainer):
         self,
         X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
         n_runs: int = 10,
-        **kwargs
+        **kwargs,
     ) -> Dict[int, tuple]:
         """Run multiple Random CS explanations and return statistics.
 
@@ -304,7 +312,7 @@ class RandomCSExplainer(GraphExplainer):
         for i, node in enumerate(self.nodes):
             results[node] = (
                 np.mean(all_values[:, i]),  # mean
-                np.std(all_values[:, i])     # standard deviation
+                np.std(all_values[:, i]),  # standard deviation
             )
 
         return results

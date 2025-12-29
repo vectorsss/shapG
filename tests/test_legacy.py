@@ -12,7 +12,7 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from shapG import (
     shapley_value,
@@ -21,7 +21,7 @@ from shapG import (
     cis,
     graph_generator,
     get_reachable_nodes_at_depth,
-    plot
+    plot,
 )
 
 
@@ -47,6 +47,7 @@ class TestLegacyShapleyValue(unittest.TestCase):
 
     def test_custom_characteristic_function(self):
         """Test with custom characteristic function."""
+
         def custom_f(G, S):
             return len(S)
 
@@ -77,11 +78,7 @@ class TestLegacyShapleyValue(unittest.TestCase):
         self.assertEqual(set(legacy_values.keys()), set(new_values.keys()))
 
         for node in self.G.nodes():
-            self.assertAlmostEqual(
-                legacy_values[node],
-                new_values[node],
-                places=6
-            )
+            self.assertAlmostEqual(legacy_values[node], new_values[node], places=6)
 
     def test_edge_cases(self):
         """Test edge cases."""
@@ -145,6 +142,7 @@ class TestLegacyShapG(unittest.TestCase):
 
     def test_custom_characteristic_function(self):
         """Test with custom characteristic function."""
+
         def custom_f(G, S):
             return len(S) ** 2
 
@@ -164,9 +162,7 @@ class TestLegacyShapG(unittest.TestCase):
 
         # New API approach
         explainer = ShapGExplainer(
-            characteristic_function=CoalitionDegree(),
-            depth=1,
-            n_samples=15
+            characteristic_function=CoalitionDegree(), depth=1, n_samples=15
         )
         new_values = explainer.fit_explain(self.G)
 
@@ -202,7 +198,9 @@ class TestLegacyCoalitionDegree(unittest.TestCase):
 
         # Full coalition
         degree = coalition_degree(self.G, set(self.G.nodes()))
-        expected = sum(dict(self.G.degree()).values()) / 2  # Divided by 2 as per characteristic function
+        expected = (
+            sum(dict(self.G.degree()).values()) / 2
+        )  # Divided by 2 as per characteristic function
         self.assertEqual(degree, expected)
 
     def test_compatibility_with_new_api(self):
@@ -212,14 +210,7 @@ class TestLegacyCoalitionDegree(unittest.TestCase):
         char_func = CoalitionDegree()
 
         # Test various coalitions
-        coalitions = [
-            set(),
-            {0},
-            {1},
-            {0, 1},
-            {0, 1, 2},
-            set(self.G.nodes())
-        ]
+        coalitions = [set(), {0}, {1}, {0, 1}, {0, 1, 2}, set(self.G.nodes())]
 
         for coalition in coalitions:
             legacy_value = coalition_degree(self.G, coalition)
@@ -265,6 +256,7 @@ class TestLegacyCIS(unittest.TestCase):
 
     def test_custom_characteristic_function(self):
         """Test CIS with custom characteristic function."""
+
         def custom_f(G, S):
             return len(S) * 2
 
@@ -290,11 +282,7 @@ class TestLegacyCIS(unittest.TestCase):
         self.assertEqual(set(legacy_values.keys()), set(new_values.keys()))
 
         for node in self.G.nodes():
-            self.assertAlmostEqual(
-                legacy_values[node],
-                new_values[node],
-                places=6
-            )
+            self.assertAlmostEqual(legacy_values[node], new_values[node], places=6)
 
 
 class TestLegacyGraphGenerator(unittest.TestCase):
@@ -373,9 +361,7 @@ class TestLegacyGetReachableNodes(unittest.TestCase):
         """Test compatibility with new API."""
         from shapG.utils.graph_helpers import get_reachable_nodes_at_depth as utils_func
 
-        test_cases = [
-            (0, 1), (0, 2), (2, 1), (2, 2), (4, 1)
-        ]
+        test_cases = [(0, 1), (0, 2), (2, 1), (2, 2), (4, 1)]
 
         for node, depth in test_cases:
             legacy_result = get_reachable_nodes_at_depth(self.G, node, depth)
@@ -402,17 +388,14 @@ class TestLegacyPlot(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.shapley_values = {
-            'Feature_A': 0.5,
-            'Feature_B': -0.3,
-            'Feature_C': 0.8
-        }
+        self.shapley_values = {"Feature_A": 0.5, "Feature_B": -0.3, "Feature_C": 0.8}
 
     def test_basic_plotting(self):
         """Test basic plotting functionality."""
         # Import matplotlib and set non-interactive backend
         import matplotlib
-        matplotlib.use('Agg')
+
+        matplotlib.use("Agg")
 
         result = plot(self.shapley_values, show_plot=False)
 
@@ -421,6 +404,7 @@ class TestLegacyPlot(unittest.TestCase):
         self.assertEqual(len(result), 2)
 
         import matplotlib.pyplot as plt
+
         fig, ax = result
         self.assertIsInstance(fig, plt.Figure)
         self.assertIsInstance(ax, plt.Axes)
@@ -430,7 +414,8 @@ class TestLegacyPlot(unittest.TestCase):
     def test_compatibility_with_new_api(self):
         """Test compatibility with new visualization API."""
         import matplotlib
-        matplotlib.use('Agg')
+
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
         from shapG.visualization.plot import plot as new_plot
@@ -452,11 +437,12 @@ class TestLegacyPlot(unittest.TestCase):
     def test_with_feature_names(self):
         """Test with feature names parameter."""
         import matplotlib
-        matplotlib.use('Agg')
+
+        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
         values = {0: 0.5, 1: -0.3, 2: 0.8}
-        feature_names = ['Custom_A', 'Custom_B', 'Custom_C']
+        feature_names = ["Custom_A", "Custom_B", "Custom_C"]
 
         result = plot(values, feature_names=feature_names, show_plot=False)
         self.assertIsInstance(result, tuple)
@@ -477,7 +463,7 @@ class TestLegacyBackwardCompatibility(unittest.TestCase):
             cis,
             graph_generator,
             get_reachable_nodes_at_depth,
-            plot
+            plot,
         )
 
         # All should be callable
@@ -569,8 +555,11 @@ class TestLegacyBackwardCompatibility(unittest.TestCase):
             values = shapley_value(G, verbose=False)
 
             # Deprecation warnings should be triggered for legacy API usage
-            deprecation_warnings = [warning for warning in w
-                                    if issubclass(warning.category, DeprecationWarning)]
+            deprecation_warnings = [
+                warning
+                for warning in w
+                if issubclass(warning.category, DeprecationWarning)
+            ]
             # We should have 2 warnings: one for graph_generator and one for shapley_value
             self.assertEqual(len(deprecation_warnings), 2)
 
@@ -581,5 +570,5 @@ class TestLegacyBackwardCompatibility(unittest.TestCase):
             self.assertTrue(any("0.15.0" in msg for msg in warning_messages))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

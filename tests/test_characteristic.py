@@ -11,14 +11,14 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from shapG.characteristic import (
     CoalitionDegree,
     NodeCount,
     WeightedSum,
     CustomFunction,
-    CenterOfImputationSet
+    CenterOfImputationSet,
 )
 
 
@@ -227,6 +227,7 @@ class TestCustomFunction(unittest.TestCase):
 
     def test_initialization(self):
         """Test CustomFunction initialization."""
+
         def test_func(coalition, context=None):
             return len(coalition)
 
@@ -236,6 +237,7 @@ class TestCustomFunction(unittest.TestCase):
 
     def test_initialization_without_name(self):
         """Test initialization without explicit name."""
+
         def test_func(coalition, context=None):
             return len(coalition)
 
@@ -244,6 +246,7 @@ class TestCustomFunction(unittest.TestCase):
 
     def test_function_calling(self):
         """Test that wrapped function is called correctly."""
+
         def test_func(coalition, context=None):
             return len(coalition) * 2
 
@@ -255,6 +258,7 @@ class TestCustomFunction(unittest.TestCase):
 
     def test_context_passing(self):
         """Test that context is passed to wrapped function."""
+
         def test_func(coalition, context=None):
             if context is None:
                 return len(coalition)
@@ -268,8 +272,9 @@ class TestCustomFunction(unittest.TestCase):
 
     def test_complex_function(self):
         """Test with more complex wrapped function."""
+
         def graph_based_func(coalition, context=None):
-            if context is None or not hasattr(context, 'nodes'):
+            if context is None or not hasattr(context, "nodes"):
                 return len(coalition) ** 2
 
             # Count edges within coalition
@@ -288,6 +293,7 @@ class TestCustomFunction(unittest.TestCase):
 
     def test_function_with_kwargs(self):
         """Test function that uses keyword arguments."""
+
         def test_func(coalition, context=None, multiplier=1):
             return len(coalition) * multiplier
 
@@ -303,11 +309,7 @@ class TestCenterOfImputationSet(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.data = np.array([
-            [1.0, 2.0, 3.0],
-            [4.0, 5.0, 6.0],
-            [7.0, 8.0, 9.0]
-        ])
+        self.data = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
 
         # Create mock model
         self.model = Mock()
@@ -468,7 +470,7 @@ class TestCharacteristicFunctionIntegration(unittest.TestCase):
             NodeCount(),
             WeightedSum(weights),
             CustomFunction(custom_func),
-            CenterOfImputationSet(data, model)
+            CenterOfImputationSet(data, model),
         ]
 
         # Test basic properties
@@ -529,5 +531,5 @@ class TestCharacteristicFunctionIntegration(unittest.TestCase):
         np.testing.assert_array_equal(individual_results, batch_results)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -67,7 +67,7 @@ class LeverageScoreExplainer(Explainer):
         paired_sampling: bool = True,
         use_bernoulli: bool = True,
         random_state: Optional[int] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         super().__init__(characteristic_function, verbose)
         self.n_samples = n_samples
@@ -85,7 +85,9 @@ class LeverageScoreExplainer(Explainer):
         # Use new Generator API for 64-bit integer support (Windows compatibility)
         self._rng = np.random.default_rng(random_state)
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'LeverageScoreExplainer':
+    def fit(
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs
+    ) -> "LeverageScoreExplainer":
         """
         Fit the explainer to data.
 
@@ -127,7 +129,9 @@ class LeverageScoreExplainer(Explainer):
 
         return self
 
-    def explain(self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs) -> Dict:
+    def explain(
+        self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
+    ) -> Dict:
         """
         Compute Shapley values.
 
@@ -204,7 +208,11 @@ class LeverageScoreExplainer(Explainer):
         values = np.zeros(len(Z))
         for i, coalition_vec in enumerate(Z):
             # Convert binary vector to set of feature names
-            coalition = {self.feature_names_[j] for j in range(len(coalition_vec)) if coalition_vec[j] == 1}
+            coalition = {
+                self.feature_names_[j]
+                for j in range(len(coalition_vec))
+                if coalition_vec[j] == 1
+            }
             values[i] = self.characteristic_function(coalition, self._context)
         return values
 
@@ -255,11 +263,7 @@ class LeverageScoreExplainer(Explainer):
         # w(s) = (s-1)!(n-s-1)! / n! = (n-1) / (C(n,s) * s * (n-s))
         return (n - 1) / (comb(n, s, exact=False) * s * (n - s))
 
-    def _bernoulli_sample(
-        self,
-        n: int,
-        m: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def _bernoulli_sample(self, n: int, m: int) -> Tuple[np.ndarray, np.ndarray]:
         """
         Perform Bernoulli sampling without replacement (Algorithm 2 from paper).
 
@@ -353,11 +357,7 @@ class LeverageScoreExplainer(Explainer):
 
         return np.array(Z_prime), np.array(weights)
 
-    def _simple_leverage_sample(
-        self,
-        n: int,
-        m: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def _simple_leverage_sample(self, n: int, m: int) -> Tuple[np.ndarray, np.ndarray]:
         """
         Simple leverage score sampling with replacement.
 
@@ -421,6 +421,7 @@ class LeverageScoreExplainer(Explainer):
         float
             Oversampling parameter c
         """
+
         def expected_samples(c):
             total = 0
             for s in range(1, (n // 2) + 1):
@@ -448,11 +449,7 @@ class LeverageScoreExplainer(Explainer):
         return c_mid
 
     def _index_to_coalition(
-        self,
-        n: int,
-        s: int,
-        index: int,
-        is_middle: bool = False
+        self, n: int, s: int, index: int, is_middle: bool = False
     ) -> np.ndarray:
         """
         Convert index to coalition (Algorithm 3: Combo from paper).
@@ -502,11 +499,7 @@ class LeverageScoreExplainer(Explainer):
         return coalition
 
     def _solve_regression(
-        self,
-        Z: np.ndarray,
-        y: np.ndarray,
-        weights: np.ndarray,
-        n: int
+        self, Z: np.ndarray, y: np.ndarray, weights: np.ndarray, n: int
     ) -> np.ndarray:
         """
         Solve weighted constrained least squares regression.

@@ -12,8 +12,10 @@ import math
 import warnings
 from scipy.linalg import qr
 from scipy.optimize import minimize
+
 try:
     import cvxpy as cp
+
     CVXPY_AVAILABLE = True
 except ImportError:
     CVXPY_AVAILABLE = False
@@ -53,7 +55,7 @@ class QRCSExplainer(Explainer):
         n_measurements: Optional[int] = None,
         tolerance: float = 5e-5,
         use_fast_fallback: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """Initialize QR-CS explainer.
 
@@ -77,7 +79,7 @@ class QRCSExplainer(Explainer):
     def _parse_input(
         self,
         X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
-        context: Optional[Any] = None
+        context: Optional[Any] = None,
     ) -> Tuple[int, List, Any]:
         """Parse input to extract player count, identifiers, and context.
 
@@ -133,8 +135,8 @@ class QRCSExplainer(Explainer):
         self,
         X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
         context: Optional[Any] = None,
-        **kwargs
-    ) -> 'QRCSExplainer':
+        **kwargs,
+    ) -> "QRCSExplainer":
         """Fit the explainer to data.
 
         Args:
@@ -154,7 +156,7 @@ class QRCSExplainer(Explainer):
         self.n, self.player_ids, self._context = self._parse_input(X, context)
 
         # Initialize QR-CS components (matching original implementation)
-        self.m = min(2**(self.n - 1), DEFAULT_MAX_COALITIONS)
+        self.m = min(2 ** (self.n - 1), DEFAULT_MAX_COALITIONS)
 
         # Warn about memory for large problems
         if self.n > 15 and self.m >= 1000:
@@ -162,18 +164,24 @@ class QRCSExplainer(Explainer):
                 f"QR-CS for {self.n} players will use {self.m} coalitions. "
                 f"This may consume significant memory. Consider using BlockQRCSExplainer "
                 f"for better memory efficiency on large problems.",
-                ResourceWarning
+                ResourceWarning,
             )
 
         if self.n_measurements is None:
-            self.l = min(int(2 * self.n * np.log(max(self.n, 2))), self.m // 2, DEFAULT_MAX_MEASUREMENTS)
+            self.l = min(
+                int(2 * self.n * np.log(max(self.n, 2))),
+                self.m // 2,
+                DEFAULT_MAX_MEASUREMENTS,
+            )
         else:
             self.l = min(self.n_measurements, self.m)
 
         # Pre-compute components
         self.weights = self._compute_weights_per_index()
         self.Psi = self._get_dct_basis()
-        self.B, self.selected_coalitions, self.Q_from_V = self._compute_measurement_matrix()
+        self.B, self.selected_coalitions, self.Q_from_V = (
+            self._compute_measurement_matrix()
+        )
 
         self._fitted = True
         return self
@@ -182,7 +190,7 @@ class QRCSExplainer(Explainer):
         self,
         X: Optional[Union[int, np.ndarray, pd.DataFrame, nx.Graph, List]] = None,
         context: Optional[Any] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict:
         """Compute QR-CS Shapley values.
 
@@ -207,7 +215,9 @@ class QRCSExplainer(Explainer):
         shapley_indices = self._compute_shapley(utility_wrapper)
 
         # Map back to player identifiers
-        shapley_values = {self.player_ids[i]: value for i, value in shapley_indices.items()}
+        shapley_values = {
+            self.player_ids[i]: value for i, value in shapley_indices.items()
+        }
 
         return shapley_values
 
@@ -244,9 +254,11 @@ class QRCSExplainer(Explainer):
         for k in range(self.m):
             for n in range(self.m):
                 if k == 0:
-                    Psi[n, k] = np.sqrt(1/self.m)
+                    Psi[n, k] = np.sqrt(1 / self.m)
                 else:
-                    Psi[n, k] = np.sqrt(2/self.m) * np.cos(np.pi * k * (n + 0.5) / self.m)
+                    Psi[n, k] = np.sqrt(2 / self.m) * np.cos(
+                        np.pi * k * (n + 0.5) / self.m
+                    )
         return Psi
 
     def _compute_measurement_matrix(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -257,10 +269,10 @@ class QRCSExplainer(Explainer):
         """
         # QR decomposition with pivoting on Ψ^T (DCT basis transpose)
         V = self.Psi.T
-        Q, R, P = qr(V, pivoting=True, mode='economic' if self.m > 1000 else 'full')
+        Q, R, P = qr(V, pivoting=True, mode="economic" if self.m > 1000 else "full")
 
         # Select first l pivoted indices (most important coalitions)
-        selected_indices = P[:self.l]
+        selected_indices = P[: self.l]
 
         # Create binary measurement matrix B
         B = np.zeros((self.l, self.m))
@@ -279,8 +291,8 @@ class QRCSExplainer(Explainer):
         # This avoids overflow for large coalition indices (> 2^31)
         idx = int(idx)
 
-        if idx >= 2**(self.n - 1):
-            idx = idx % 2**(self.n - 1)
+        if idx >= 2 ** (self.n - 1):
+            idx = idx % 2 ** (self.n - 1)
 
         # Use Python's arbitrary precision integers to avoid overflow
         for i, p in enumerate(available_players):
@@ -331,17 +343,22 @@ class QRCSExplainer(Explainer):
                     u_hat = self.Psi @ self.Q_from_V @ s_hat
 
                     # Step 3: Compute Shapley value as weighted sum
-                    shapley_values[player] = float(np.dot(self.weights[:len(u_hat)], u_hat))
+                    shapley_values[player] = float(
+                        np.dot(self.weights[: len(u_hat)], u_hat)
+                    )
                 except Exception as e:
                     import warnings
+
                     warnings.warn(
                         f"QR-CS L1 reconstruction failed for player {player}: {str(e)}. "
                         f"Falling back to mean of measured contributions. "
                         f"Consider installing cvxpy for better results: pip install cvxpy",
-                        RuntimeWarning
+                        RuntimeWarning,
                     )
                     if self.verbose:
-                        print(f"Warning: QR-CS reconstruction failed for player {player}, using fallback: {str(e)}")
+                        print(
+                            f"Warning: QR-CS reconstruction failed for player {player}, using fallback: {str(e)}"
+                        )
                     # Fallback: use mean of measured contributions
                     shapley_values[player] = np.mean(y) if len(y) > 0 else 0
 
@@ -360,22 +377,24 @@ class QRCSExplainer(Explainer):
                 prob = cp.Problem(objective, constraints)
                 prob.solve()
 
-                if prob.status in ['optimal', 'optimal_inaccurate']:
+                if prob.status in ["optimal", "optimal_inaccurate"]:
                     return x.value
                 else:
                     import warnings
+
                     warnings.warn(
                         f"CVXPY L1 minimization failed with status: {prob.status}. "
                         f"Falling back to least squares approximation.",
-                        RuntimeWarning
+                        RuntimeWarning,
                     )
                     # Fall back to least squares if CVXPY fails
                     return np.linalg.lstsq(A, b, rcond=None)[0]
             except Exception as e:
                 import warnings
+
                 warnings.warn(
                     f"CVXPY solver failed: {e}. Falling back to least squares approximation.",
-                    RuntimeWarning
+                    RuntimeWarning,
                 )
                 if self.verbose:
                     print(f"CVXPY solver failed: {e}, using least squares fallback")
@@ -400,14 +419,16 @@ class QRCSExplainer(Explainer):
             def constraint(x):
                 return self.tolerance - np.linalg.norm(A @ x - b)
 
-            constraints = {'type': 'ineq', 'fun': constraint}
+            constraints = {"type": "ineq", "fun": constraint}
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 result = minimize(
-                    objective, x0, method='SLSQP',
+                    objective,
+                    x0,
+                    method="SLSQP",
                     constraints=constraints,
-                    options={'maxiter': 200, 'ftol': 1e-6}
+                    options={"maxiter": 200, "ftol": 1e-6},
                 )
 
             return result.x if result.success else x0

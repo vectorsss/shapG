@@ -25,7 +25,7 @@ class ExactExplainer(GraphExplainer):
     def __init__(
         self,
         characteristic_function: Optional[CharacteristicFunction] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """Initialize exact explainer.
 
@@ -35,7 +35,9 @@ class ExactExplainer(GraphExplainer):
         """
         super().__init__(characteristic_function or CoalitionDegree(), verbose)
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'ExactExplainer':
+    def fit(
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs
+    ) -> "ExactExplainer":
         """Fit the explainer to data.
 
         Args:
@@ -57,9 +59,7 @@ class ExactExplainer(GraphExplainer):
         return self
 
     def explain(
-        self,
-        X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
-        **kwargs
+        self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
     ) -> Dict[int, float]:
         """Compute exact Shapley values.
 
@@ -82,16 +82,19 @@ class ExactExplainer(GraphExplainer):
         # Warn about memory requirements for large graphs
         if n > LARGE_GRAPH_WARNING_THRESHOLD:
             import warnings
+
             warnings.warn(
                 f"Computing exact Shapley values for {n} nodes requires evaluating "
                 f"2^{n} = {2**n:,} coalitions. This may consume significant memory and time. "
                 f"Consider using an approximate method (ShapGExplainer, QRCSExplainer) for n > {LARGE_GRAPH_WARNING_THRESHOLD}.",
-                ResourceWarning
+                ResourceWarning,
             )
 
         fact = [factorial(i) for i in range(n + 1)]
 
-        iterator = tqdm(nodes, desc="Computing Shapley values") if self.verbose else nodes
+        iterator = (
+            tqdm(nodes, desc="Computing Shapley values") if self.verbose else nodes
+        )
 
         for node in iterator:
             other_nodes = [n for n in nodes if n != node]
@@ -103,13 +106,9 @@ class ExactExplainer(GraphExplainer):
                     coalition = set(coalition_tuple)
 
                     v_with = self.characteristic_function(
-                        coalition | {node},
-                        self.graph
+                        coalition | {node}, self.graph
                     )
-                    v_without = self.characteristic_function(
-                        coalition,
-                        self.graph
-                    )
+                    v_without = self.characteristic_function(coalition, self.graph)
 
                     shapley_values[node] += weight * (v_with - v_without)
 

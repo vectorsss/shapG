@@ -15,11 +15,17 @@ from ..explainer.shapg import ShapGExplainer
 from ..explainer.cis import CISExplainer
 from ..characteristic.characteristic_functions import CoalitionDegree, CustomFunction
 from ..utils.graph_construction import GraphBuilder
-from ..utils.graph_helpers import graph_generator as _graph_generator, get_reachable_nodes_at_depth as _get_reachable_nodes_at_depth, coalition_degree as _coalition_degree
+from ..utils.graph_helpers import (
+    graph_generator as _graph_generator,
+    get_reachable_nodes_at_depth as _get_reachable_nodes_at_depth,
+    coalition_degree as _coalition_degree,
+)
 from ..visualization.visualization import plot_shapley_values as _plot_shapley_values
 
 
-def shapley_value(G: nx.Graph, f: Optional[Callable] = None, verbose: bool = False) -> Dict[int, float]:
+def shapley_value(
+    G: nx.Graph, f: Optional[Callable] = None, verbose: bool = False
+) -> Dict[int, float]:
     """Calculate exact Shapley values for all nodes (backward compatible).
 
     Args:
@@ -35,7 +41,7 @@ def shapley_value(G: nx.Graph, f: Optional[Callable] = None, verbose: bool = Fal
         "Please use ExactExplainer instead: "
         "explainer = ExactExplainer(); shapley_values = explainer.fit_explain(G)",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     if f is None:
@@ -54,7 +60,7 @@ def shapG(
     m: int = 15,
     approximate_by_ratio: bool = True,
     scale: bool = True,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> Dict[int, float]:
     """Approximate Shapley values using ShapG algorithm (backward compatible).
 
@@ -75,7 +81,7 @@ def shapG(
         "Please use ShapGExplainer instead: "
         "explainer = ShapGExplainer(depth=depth, n_samples=m); shapley_values = explainer.fit_explain(G)",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     if f is None:
@@ -89,7 +95,7 @@ def shapG(
         n_samples=m,
         approximate_by_ratio=approximate_by_ratio,
         scale=scale,
-        verbose=verbose
+        verbose=verbose,
     )
     return explainer.fit_explain(G)
 
@@ -109,7 +115,7 @@ def coalition_degree(G: nx.Graph, S: Union[set, list]) -> float:
         "Please use CoalitionDegree class instead: "
         "char_func = CoalitionDegree(); value = char_func(coalition, G)",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     return _coalition_degree(G, S)
@@ -130,7 +136,7 @@ def cis(G: nx.Graph, f: Optional[Callable] = None) -> Dict[int, float]:
         "Please use CISExplainer instead: "
         "explainer = CISExplainer(); cis_values = explainer.fit_explain(G)",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     if f is None:
@@ -145,10 +151,7 @@ def cis(G: nx.Graph, f: Optional[Callable] = None) -> Dict[int, float]:
     surplus = grand_coalition_value - total_individual_value
     equal_share = surplus / n_nodes if n_nodes > 0 else 0
 
-    cis_values = {
-        node: individual_values[node] + equal_share
-        for node in nodes
-    }
+    cis_values = {node: individual_values[node] + equal_share for node in nodes}
     return cis_values
 
 
@@ -156,7 +159,7 @@ def graph_generator(
     n_nodes: int,
     density: float,
     weight_range: Optional[tuple] = (1, 10),
-    seed: int = 2333
+    seed: int = 2333,
 ) -> nx.Graph:
     """Generate a random graph (backward compatible).
 
@@ -174,7 +177,7 @@ def graph_generator(
         "Please use GraphBuilder instead: "
         "builder = GraphBuilder(); G = builder.random_graph(n_nodes, density)",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     return _graph_generator(n_nodes, density, weight_range, seed)
@@ -196,7 +199,7 @@ def get_reachable_nodes_at_depth(G: nx.Graph, node: int, depth: int) -> set:
         "Please use NetworkX functions directly: "
         "nx.single_source_shortest_path_length(G, node, cutoff=depth)",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     return _get_reachable_nodes_at_depth(G, node, depth)
@@ -206,11 +209,11 @@ def plot(
     shapley_values: Union[Dict[int, float], pd.Series],
     feature_names: Optional[list] = None,
     top_n: int = 10,
-    style: str = 'seaborn-v0_8',
+    style: str = "seaborn-v0_8",
     figsize: tuple = (10, 6),
-    color: str = '#1f77b4',
+    color: str = "#1f77b4",
     show_values: bool = True,
-    show_plot: bool = True
+    show_plot: bool = True,
 ) -> Optional[tuple]:
     """Plot Shapley values (backward compatible).
 
@@ -232,7 +235,7 @@ def plot(
         "Please use FeatureImportanceVisualizer or plot_shapley_values() instead: "
         "viz = FeatureImportanceVisualizer(); viz.plot_importance(shapley_values)",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     return _plot_shapley_values(
@@ -243,7 +246,5 @@ def plot(
         figsize=figsize,
         color=color,
         show_values=show_values,
-        show_plot=show_plot
+        show_plot=show_plot,
     )
-
-

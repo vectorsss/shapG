@@ -37,7 +37,9 @@ class CharacteristicFunction(ABC):
         """
         raise NotImplementedError
 
-    def batch_compute(self, coalitions: List[Set[int]], context: Optional[Any] = None) -> np.ndarray:
+    def batch_compute(
+        self, coalitions: List[Set[int]], context: Optional[Any] = None
+    ) -> np.ndarray:
         """Compute values for multiple coalitions.
 
         Args:
@@ -56,7 +58,7 @@ class Explainer(ABC):
     def __init__(
         self,
         characteristic_function: Optional[CharacteristicFunction] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """Initialize the explainer.
 
@@ -70,7 +72,9 @@ class Explainer(ABC):
         self._feature_names = None
 
     @abstractmethod
-    def fit(self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs) -> 'Explainer':
+    def fit(
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs
+    ) -> "Explainer":
         """Fit the explainer to data.
 
         Args:
@@ -84,9 +88,7 @@ class Explainer(ABC):
 
     @abstractmethod
     def explain(
-        self,
-        X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None,
-        **kwargs
+        self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
     ) -> Dict[int, float]:
         """Compute feature importance scores.
 
@@ -100,9 +102,7 @@ class Explainer(ABC):
         raise NotImplementedError
 
     def fit_explain(
-        self,
-        X: Union[np.ndarray, pd.DataFrame, nx.Graph],
-        **kwargs
+        self, X: Union[np.ndarray, pd.DataFrame, nx.Graph], **kwargs
     ) -> Dict[int, float]:
         """Fit and explain in one step.
 
@@ -123,7 +123,7 @@ class Explainer(ABC):
         """
         return self._feature_names
 
-    def set_feature_names(self, names: List[str]) -> 'Explainer':
+    def set_feature_names(self, names: List[str]) -> "Explainer":
         """Set feature names.
 
         Args:
@@ -142,14 +142,14 @@ class GraphExplainer(Explainer):
     def __init__(
         self,
         characteristic_function: Optional[CharacteristicFunction] = None,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """Initialize the graph explainer."""
         super().__init__(characteristic_function, verbose)
         self.graph = None
         self.coalitions = None
 
-    def set_graph(self, G: nx.Graph) -> 'GraphExplainer':
+    def set_graph(self, G: nx.Graph) -> "GraphExplainer":
         """Set the graph for explanation.
 
         Args:
@@ -161,7 +161,7 @@ class GraphExplainer(Explainer):
         self.graph = G
         return self
 
-    def set_coalitions(self, coalitions: Dict[int, Set[int]]) -> 'GraphExplainer':
+    def set_coalitions(self, coalitions: Dict[int, Set[int]]) -> "GraphExplainer":
         """Set pre-computed coalitions for each node.
 
         Args:
