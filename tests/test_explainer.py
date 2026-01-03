@@ -794,5 +794,152 @@ class TestExplainerIntegration(unittest.TestCase):
         self.assertEqual(set(values.keys()), expected_keys)
 
 
+class TestEdgeCases(unittest.TestCase):
+    """Test edge cases and boundary conditions for explainers."""
+
+    def test_single_node_graph(self):
+        """Test explainers with single-node graph."""
+        G = nx.Graph()
+        G.add_node(0)
+        char_func = CoalitionDegree()
+
+        # ExactExplainer should work
+        explainer = ExactExplainer(char_func)
+        values = explainer.fit_explain(G)
+
+        self.assertEqual(len(values), 1)
+        self.assertIn(0, values)
+        self.assertEqual(values[0], 0.0)  # Single node has degree 0
+
+    def test_two_node_graph(self):
+        """Test explainers with minimal two-node graph."""
+        G = nx.Graph()
+        G.add_edge(0, 1)
+        char_func = CoalitionDegree()
+
+        explainer = ExactExplainer(char_func)
+        values = explainer.fit_explain(G)
+
+        self.assertEqual(len(values), 2)
+        # In a two-node graph, each contributes equally
+        self.assertAlmostEqual(values[0], values[1], places=6)
+
+    def test_disconnected_graph(self):
+        """Test explainers with disconnected graph."""
+        G = nx.Graph()
+        G.add_edge(0, 1)
+        G.add_edge(2, 3)
+        char_func = CoalitionDegree()
+
+        explainer = ExactExplainer(char_func)
+        values = explainer.fit_explain(G)
+
+        self.assertEqual(len(values), 4)
+        # All nodes should have values
+        for node in G.nodes():
+            self.assertIn(node, values)
+
+    def test_shapg_invalid_depth(self):
+        """Test ShapGExplainer raises error for invalid depth."""
+        with self.assertRaises(ValueError):
+            ShapGExplainer(depth=0)
+
+        with self.assertRaises(ValueError):
+            ShapGExplainer(depth=-1)
+
+    def test_shapg_invalid_n_samples(self):
+        """Test ShapGExplainer raises error for invalid n_samples."""
+        with self.assertRaises(ValueError):
+            ShapGExplainer(n_samples=0)
+
+        with self.assertRaises(ValueError):
+            ShapGExplainer(n_samples=-5)
+
+    def test_shapg_invalid_cache_size(self):
+        """Test ShapGExplainer raises error for invalid cache_size."""
+        with self.assertRaises(ValueError):
+            ShapGExplainer(cache_size=0)
+
+        with self.assertRaises(ValueError):
+            ShapGExplainer(cache_size=-1)
+
+    def test_explainer_not_fitted_error(self):
+        """Test that explain() raises error when not fitted."""
+        explainer = ExactExplainer(CoalitionDegree())
+
+        with self.assertRaises(ValueError):
+            explainer.explain()
+
+    def test_invalid_input_type(self):
+        """Test that explainers raise error for invalid input types."""
+        explainer = ShapGExplainer()
+
+        with self.assertRaises(ValueError):
+            explainer.fit("invalid string input")
+
+        with self.assertRaises(ValueError):
+            explainer.fit([1, 2, 3])  # List instead of array
+
+    def test_empty_data_array(self):
+        """Test handling of empty data arrays."""
+        explainer = ShapGExplainer()
+        empty_data = np.array([]).reshape(0, 0)
+
+        # Empty array may produce empty graph or raise error depending on implementation
+        # Test that it doesn't crash unexpectedly
+        try:
+            result = explainer.fit(empty_data)
+            # If no error, the result should be fitted with empty graph
+            self.assertTrue(explainer._fitted)
+        except (ValueError, IndexError, KeyError):
+            # These are acceptable errors for empty input
+            pass
+
+    def test_single_feature_data(self):
+        """Test with single-feature dataset."""
+        data = np.random.randn(100, 1)
+        explainer = ExactExplainer(CoalitionDegree())
+        values = explainer.fit_explain(data)
+
+        self.assertEqual(len(values), 1)
+
+    def test_large_depth_parameter(self):
+        """Test ShapGExplainer with depth larger than graph diameter."""
+        G = nx.path_graph(5)  # Linear graph: 0-1-2-3-4
+        explainer = ShapGExplainer(depth=100)  # Much larger than diameter
+
+        # Should still work without error
+        values = explainer.fit_explain(G)
+        self.assertEqual(len(values), 5)
+
+    def test_cis_with_small_graph(self):
+        """Test CISExplainer with very small graph."""
+        G = nx.complete_graph(3)
+        char_func = CoalitionDegree()
+
+        explainer = CISExplainer(char_func)
+        values = explainer.fit_explain(G)
+
+        self.assertEqual(len(values), 3)
+        # Complete graph should have symmetric values
+        self.assertAlmostEqual(values[0], values[1], places=6)
+        self.assertAlmostEqual(values[1], values[2], places=6)
+
+    def test_custom_characteristic_function(self):
+        """Test with custom characteristic function."""
+        G = nx.Graph()
+        G.add_edges_from([(0, 1), (1, 2)])
+
+        # Custom function that returns coalition size
+        custom_func = CustomFunction(lambda coalition, context: len(coalition))
+
+        explainer = ExactExplainer(custom_func)
+        values = explainer.fit_explain(G)
+
+        self.assertEqual(len(values), 3)
+        # Sum should equal grand coalition value (3 nodes)
+        self.assertAlmostEqual(sum(values.values()), 3.0, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()

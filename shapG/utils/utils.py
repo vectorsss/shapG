@@ -21,6 +21,8 @@ def corr_generator(
 ) -> pd.DataFrame:
     """Generate a correlation matrix of a dataframe using the specified method.
 
+    Uses vectorized pandas methods when possible for better performance.
+
     Args:
         df (pd.DataFrame or np.ndarray): Input DataFrame or array.
         method (Callable or str, optional): Function to calculate correlation coefficients
@@ -37,32 +39,32 @@ def corr_generator(
     if isinstance(df, np.ndarray):
         df = pd.DataFrame(df, columns=[f"col_{i}" for i in range(df.shape[1])])
 
+    # Map functions to pandas method names for vectorized computation
+    func_to_pandas_method = {
+        pearsonr: "pearson",
+        kendalltau: "kendall",
+        spearmanr: "spearman",
+    }
+
     # Handle string method names
     if isinstance(method, str):
-        method_map = {"pearson": pearsonr, "kendall": kendalltau, "spearman": spearmanr}
-        if method not in method_map:
+        pandas_method_map = {
+            "pearson": "pearson",
+            "kendall": "kendall",
+            "spearman": "spearman",
+        }
+        if method not in pandas_method_map:
             raise ValueError(
                 "method should be 'pearson', 'kendall', 'spearman', or the corresponding functions"
             )
-        method = method_map[method]
-    elif method not in [pearsonr, kendalltau, spearmanr]:
+        pandas_method = pandas_method_map[method]
+    elif method in func_to_pandas_method:
+        pandas_method = func_to_pandas_method[method]
+    else:
         raise ValueError("method should be pearsonr, kendalltau, or spearmanr")
 
-    # Create empty correlation matrix
-    corr_df = pd.DataFrame(
-        np.zeros((df.shape[1], df.shape[1])), columns=df.columns, index=df.columns
-    )
-
-    # Set diagonal to 1 (self-correlation)
-    np.fill_diagonal(corr_df.values, 1.0)
-
-    # Calculate correlations for all column pairs
-    for i, col1 in enumerate(df.columns):
-        # Only need to calculate upper triangle due to symmetry
-        for col2 in df.columns[i + 1 :]:
-            corr, _ = method(df[col1], df[col2])
-            corr_df.loc[col1, col2] = corr
-            corr_df.loc[col2, col1] = corr  # Symmetry
+    # Use vectorized pandas correlation (much faster for large datasets)
+    corr_df = df.corr(method=pandas_method)
 
     return corr_df
 

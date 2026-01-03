@@ -400,7 +400,7 @@ class QRCSExplainer(Explainer):
                     print(f"CVXPY solver failed: {e}, using least squares fallback")
                 try:
                     return np.linalg.lstsq(A, b, rcond=None)[0]
-                except:
+                except np.linalg.LinAlgError:
                     return np.zeros(n)
         else:
             # Original scipy implementation as fallback

@@ -101,7 +101,7 @@ def calculate_mixed_similarity_matrix(X, feature_types=None, feature_ranges=None
                 try:
                     corr, _ = pearsonr(x_i, x_j)
                     sim = abs(corr)  # Use absolute correlation
-                except:
+                except (ValueError, TypeError, FloatingPointError):
                     sim = 0.0
 
             elif type_i == "binary" and type_j == "binary":
@@ -114,7 +114,7 @@ def calculate_mixed_similarity_matrix(X, feature_types=None, feature_ranges=None
                     intersection = np.sum((x_i_bin == 1) & (x_j_bin == 1))
                     union = np.sum((x_i_bin == 1) | (x_j_bin == 1))
                     sim = intersection / union if union > 0 else 0.0
-                except:
+                except (ValueError, TypeError, ZeroDivisionError):
                     sim = 0.0
 
             elif type_i == "categorical" and type_j == "categorical":
@@ -122,7 +122,7 @@ def calculate_mixed_similarity_matrix(X, feature_types=None, feature_ranges=None
                 try:
                     # Cramér's V for categorical association
                     sim = cramers_v(x_i, x_j)
-                except:
+                except (ValueError, TypeError, ZeroDivisionError):
                     # Fallback to normalized mutual information
                     try:
                         mi = mutual_info_score(x_i, x_j)
@@ -142,7 +142,7 @@ def calculate_mixed_similarity_matrix(X, feature_types=None, feature_ranges=None
                             ]
                         )
                         sim = mi / np.sqrt(h_i * h_j) if h_i > 0 and h_j > 0 else 0.0
-                    except:
+                    except (ValueError, TypeError, ZeroDivisionError):
                         sim = 0.0
 
             else:
@@ -170,7 +170,7 @@ def calculate_mixed_similarity_matrix(X, feature_types=None, feature_ranges=None
                         np.log(len(np.unique(x_j_discrete))),
                     )
                     sim = mi / max_mi if max_mi > 0 else 0.0
-                except:
+                except (ValueError, TypeError, ZeroDivisionError):
                     sim = 0.0
 
             # Ensure similarity is in [0, 1]
@@ -264,7 +264,7 @@ def get_feature_ranking_mixed(X, y, feature_types=None, feature_ranges=None):
                     np.log(len(np.unique(y_discrete))),
                 )
                 importance_scores[i] = mi / max_mi if max_mi > 0 else 0.0
-        except:
+        except (ValueError, TypeError, ZeroDivisionError):
             importance_scores[i] = 0.0
 
     # Sort by importance (ascending - least important first for removal)

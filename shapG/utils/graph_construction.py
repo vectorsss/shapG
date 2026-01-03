@@ -355,7 +355,7 @@ class GraphBuilder:
                                 else:
                                     corr, _ = pearsonr(X_class[:, i], X_class[:, j])
                                     sim += abs(corr) * (np.sum(mask) / len(y))
-                            except:
+                            except (ValueError, TypeError, FloatingPointError):
                                 sim += 0
 
                     similarity_matrix[i, j] = sim
@@ -591,33 +591,56 @@ class GraphBuilder:
                     values[i] = result if np.isscalar(result) else result[0]
             return sorted(values, key=values.get, reverse=use_pvalue)
 
+    # Mapping of correlation method names to pandas method names (for vectorized computation)
+    _CORRELATION_PANDAS_METHODS: Dict[str, str] = {
+        "pearsonr": "pearson",
+        "kendalltau": "kendall",
+        "spearmanr": "spearman",
+    }
+
     @staticmethod
     def _calculate_similarity_matrix(
         X_array: np.ndarray, method: str = "cosine"
     ) -> np.ndarray:
-        """Calculate similarity matrix between features."""
+        """Calculate similarity matrix between features.
+
+        Uses vectorized methods when possible for better performance.
+        """
         n_features = X_array.shape[1]
-        similarity_matrix = np.zeros((n_features, n_features))
 
         if method == "mutual_info":
             from sklearn.metrics import normalized_mutual_info_score
 
+            similarity_matrix = np.zeros((n_features, n_features))
             for i in range(n_features):
                 for j in range(i + 1, n_features):
                     nmi = normalized_mutual_info_score(X_array[:, i], X_array[:, j])
                     similarity_matrix[i, j] = nmi
                     similarity_matrix[j, i] = nmi
+
+        elif method in GraphBuilder._CORRELATION_PANDAS_METHODS:
+            # Use vectorized pandas correlation (much faster)
+            df = pd.DataFrame(X_array)
+            pandas_method = GraphBuilder._CORRELATION_PANDAS_METHODS[method]
+            corr_matrix = df.corr(method=pandas_method).values
+            similarity_matrix = np.abs(corr_matrix)
+
+        elif method == "cosine":
+            # Use vectorized cosine similarity via pdist/squareform
+            # cosine_similarity = 1 - cosine_distance
+            from scipy.spatial.distance import pdist, squareform
+
+            # Transpose to compute feature-wise similarity
+            cosine_distances = pdist(X_array.T, metric="cosine")
+            similarity_matrix = 1 - squareform(cosine_distances)
+            similarity_matrix = np.abs(similarity_matrix)
+            np.fill_diagonal(similarity_matrix, 1.0)
+
         else:
-            for i in range(n_features):
-                for j in range(i + 1, n_features):
-                    if method in ["pearsonr", "kendalltau", "spearmanr"]:
-                        corr, _ = eval(method)(X_array[:, i], X_array[:, j])
-                        similarity_matrix[i, j] = abs(corr)
-                        similarity_matrix[j, i] = abs(corr)
-                    elif method == "cosine":
-                        sim = 1 - cosine(X_array[:, i], X_array[:, j])
-                        similarity_matrix[i, j] = abs(sim)
-                        similarity_matrix[j, i] = abs(sim)
+            raise ValueError(
+                f"Unknown method '{method}'. Supported: "
+                f"{list(GraphBuilder._CORRELATION_PANDAS_METHODS.keys()) + ['cosine', 'mutual_info']}"
+            )
 
         return similarity_matrix
 
@@ -808,7 +831,7 @@ class CoalitionManager:
             # Compute distances
             try:
                 distances = nx.single_source_shortest_path_length(self.graph, node)
-            except:
+            except nx.NetworkXError:
                 distances = {n: 1 for n in coalition_list}
 
             weights = np.array(

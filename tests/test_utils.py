@@ -797,5 +797,157 @@ class TestUtilsIntegration(unittest.TestCase):
             self.assertEqual(set(G.nodes()), {"A", "B", "C", "D"})
 
 
+class TestEdgeCasesUtils(unittest.TestCase):
+    """Test edge cases and boundary conditions for utils module."""
+
+    def test_corr_generator_single_column(self):
+        """Test corr_generator with single-column DataFrame."""
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        corr_df = corr_generator(df, method="pearson")
+
+        self.assertEqual(corr_df.shape, (1, 1))
+        self.assertEqual(corr_df.iloc[0, 0], 1.0)
+
+    def test_corr_generator_two_columns(self):
+        """Test corr_generator with two-column DataFrame."""
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.random.randn(10)})
+        corr_df = corr_generator(df, method="pearson")
+
+        self.assertEqual(corr_df.shape, (2, 2))
+        self.assertEqual(corr_df.iloc[0, 0], 1.0)
+        self.assertEqual(corr_df.iloc[1, 1], 1.0)
+        # Symmetric
+        self.assertAlmostEqual(corr_df.iloc[0, 1], corr_df.iloc[1, 0], places=10)
+
+    def test_corr_generator_invalid_method(self):
+        """Test corr_generator with invalid method."""
+        df = pd.DataFrame(np.random.randn(10, 3))
+
+        with self.assertRaises(ValueError):
+            corr_generator(df, method="invalid_method")
+
+    def test_corr_generator_numpy_array(self):
+        """Test corr_generator with numpy array input."""
+        arr = np.random.randn(10, 3)
+        corr_df = corr_generator(arr, method="pearson")
+
+        self.assertEqual(corr_df.shape, (3, 3))
+        # Diagonal should be 1.0
+        for i in range(3):
+            self.assertAlmostEqual(corr_df.iloc[i, i], 1.0, places=10)
+
+    def test_kl_divergence_identical(self):
+        """Test KL divergence between identical distributions."""
+        P = np.array([0.25, 0.25, 0.25, 0.25])
+        divergence = kl(P, P)
+
+        # Should be very close to 0
+        self.assertLess(divergence, 1e-6)
+
+    def test_kl_divergence_zeros(self):
+        """Test KL divergence handles zeros gracefully."""
+        P = np.array([0.5, 0.5, 0.0, 0.0])
+        Q = np.array([0.25, 0.25, 0.25, 0.25])
+
+        # Should not raise error
+        divergence = kl(P, Q)
+        self.assertIsInstance(divergence, float)
+        self.assertTrue(np.isfinite(divergence))
+
+    def test_create_minimal_edge_graph_small(self):
+        """Test minimal edge graph with small matrix."""
+        W = np.array([[1.0, 0.5], [0.5, 1.0]])
+        A, W_new = create_minimal_edge_graph(W, version="v3")
+
+        # Should create connection
+        self.assertEqual(A.shape, (2, 2))
+
+    def test_create_minimal_edge_graph_versions(self):
+        """Test all versions of minimal edge graph algorithm."""
+        W = np.array([[1.0, 0.9, 0.1], [0.9, 1.0, 0.5], [0.1, 0.5, 1.0]])
+
+        for version in ["v1", "v2", "v3"]:
+            A, W_new = create_minimal_edge_graph(W, version=version)
+            self.assertEqual(A.shape, (3, 3))
+
+    def test_graph_builder_threshold_zero(self):
+        """Test GraphBuilder with zero threshold (all edges)."""
+        data = pd.DataFrame(np.random.randn(10, 3))
+        builder = GraphBuilder()
+        G = builder.from_correlation(data, threshold=0.0)
+
+        # With threshold 0, should have all edges
+        self.assertEqual(G.number_of_nodes(), 3)
+
+    def test_graph_builder_threshold_one(self):
+        """Test GraphBuilder with threshold 1.0 (no edges)."""
+        data = pd.DataFrame(np.random.randn(10, 3))
+        builder = GraphBuilder()
+        G = builder.from_correlation(data, threshold=1.0)
+
+        # With threshold 1.0, should have few or no edges (only perfect correlations)
+        self.assertEqual(G.number_of_nodes(), 3)
+
+    def test_coalition_manager_empty_graph(self):
+        """Test CoalitionManager with graph with no edges."""
+        G = nx.Graph()
+        G.add_nodes_from([0, 1, 2])
+
+        manager = CoalitionManager(G)
+        coalitions = manager.sample_coalitions(G, n_samples=10, strategy="uniform")
+
+        self.assertEqual(len(coalitions), 10)
+
+    def test_coalition_manager_zero_samples(self):
+        """Test CoalitionManager with zero samples."""
+        G = nx.complete_graph(3)
+        manager = CoalitionManager(G)
+
+        coalitions = manager.sample_coalitions(G, n_samples=0, strategy="uniform")
+        self.assertEqual(len(coalitions), 0)
+
+    def test_kl_mi_matrix_single_feature(self):
+        """Test KL MI matrix with single feature."""
+        data = np.random.randn(50, 1)
+        mi_matrix = kl_mi_matrix(data, bins=5)
+
+        self.assertEqual(mi_matrix.shape, (1, 1))
+        self.assertEqual(mi_matrix.iloc[0, 0], 1.0)
+
+    def test_matrix_generator_all_methods(self):
+        """Test matrix_generator with all supported string methods."""
+        df = pd.DataFrame(np.random.randn(20, 3), columns=["A", "B", "C"])
+
+        methods = ["pearson", "kendall", "spearman"]
+        for method in methods:
+            result = matrix_generator(df, method=method)
+            self.assertEqual(result.shape, (3, 3))
+            # Check symmetry
+            self.assertTrue(np.allclose(result, result.T))
+
+    def test_calculate_similarity_matrix_methods(self):
+        """Test _calculate_similarity_matrix with all supported methods."""
+        X = np.random.randn(50, 4)
+        builder = GraphBuilder()
+
+        methods = ["pearsonr", "kendalltau", "spearmanr", "cosine"]
+        for method in methods:
+            result = builder._calculate_similarity_matrix(X, method=method)
+            self.assertEqual(result.shape, (4, 4))
+            # Check symmetry
+            self.assertTrue(np.allclose(result, result.T))
+            # Diagonal should be 1.0
+            for i in range(4):
+                self.assertAlmostEqual(result[i, i], 1.0, places=5)
+
+    def test_calculate_similarity_matrix_invalid_method(self):
+        """Test _calculate_similarity_matrix with invalid method."""
+        X = np.random.randn(10, 3)
+        builder = GraphBuilder()
+
+        with self.assertRaises(ValueError):
+            builder._calculate_similarity_matrix(X, method="invalid_method")
+
+
 if __name__ == "__main__":
     unittest.main()
