@@ -2,6 +2,7 @@
 Graph construction and coalition management utilities.
 """
 
+import os
 from typing import Dict, Set, List, Tuple, Optional, Union, Callable
 import numpy as np
 import pandas as pd
@@ -273,6 +274,7 @@ class GraphBuilder:
         correlation_method: str = "cosine",
         similarity_method: str = "cosine",
         feature_ranges: Optional[Dict[str, Tuple[int, int]]] = None,
+        feature_types: Optional[Dict[int, str]] = None,
         use_mixed_similarity: bool = False,
         use_target_aware: bool = False,
         enforce_cross_type_edges: bool = False,
@@ -291,6 +293,9 @@ class GraphBuilder:
             similarity_method: Method for edge weight calculation (same options as correlation_method)
             feature_ranges: Dict with 'num', 'cat', 'bin' keys for feature type ranges
                           Example: {'num': (0, 5), 'cat': (5, 8), 'bin': (8, 10)}
+            feature_types: Per-index type dict {index: 'numerical'|'categorical'|'binary'}
+                          for interleaved (non-contiguous) feature types; takes precedence
+                          over feature_ranges in the mixed-similarity path
             use_mixed_similarity: If True, use appropriate similarity for each feature type
             use_target_aware: If True, use target-aware similarity for binary classification
             enforce_cross_type_edges: If True, always keep edges between different feature types
@@ -313,9 +318,11 @@ class GraphBuilder:
         if use_target_aware and len(np.unique(y)) == 2:
             from sklearn.feature_selection import mutual_info_classif
 
-            # Get feature importance using mutual information with target
+            # Get feature importance using mutual information with target.
+            # Ascending MI: least target-relevant features are pruned first,
+            # consistent with get_feature_rank.
             mi_scores = mutual_info_classif(X_array, y.ravel() if y.ndim > 1 else y)
-            feature_rank_indices = np.argsort(mi_scores)[::-1]
+            feature_rank_indices = np.argsort(mi_scores)
             feature_rank = [features[i] for i in feature_rank_indices]
 
             # Calculate similarity based on how similarly features predict the target
@@ -368,19 +375,20 @@ class GraphBuilder:
                 get_feature_ranking_mixed,
             )
 
-            # Get feature ranking using mixed methods
+            # Get feature ranking using mixed methods (per-index feature_types
+            # takes precedence over contiguous feature_ranges)
             feature_rank_indices = get_feature_ranking_mixed(
-                X, y, feature_ranges=feature_ranges
+                X, y, feature_types=feature_types, feature_ranges=feature_ranges
             )
             feature_rank = [features[i] for i in feature_rank_indices]
 
             # Calculate similarity matrix using mixed methods
             similarity_matrix, _ = calculate_mixed_similarity_matrix(
-                X, feature_ranges=feature_ranges
+                X, feature_types=feature_types, feature_ranges=feature_ranges
             )
         else:
             # Get feature ranking
-            feature_rank_indices = GraphBuilder._get_feature_rank(
+            feature_rank_indices = GraphBuilder.get_feature_rank(
                 X, y, correlation_method
             )
             feature_rank = [features[i] for i in feature_rank_indices]
@@ -530,66 +538,60 @@ class GraphBuilder:
         )
 
     @staticmethod
-    def _get_feature_rank(
+    def get_feature_rank(
         X: Union[np.ndarray, pd.DataFrame], y: np.ndarray, method: str = "cosine"
     ) -> List[int]:
-        """Get feature ranking based on correlation with target."""
-        method_map = {
-            "pearsonr": pearsonr,
-            "kendalltau": kendalltau,
-            "spearmanr": spearmanr,
-            "cosine": lambda x, y: 1 - cosine(x, y),
-            "mutual_info": None,
-        }
+        """Rank features by their association strength with the target.
 
-        if method not in method_map:
-            raise ValueError(f"Method {method} not supported")
+        All methods return an importance score (larger = more associated):
+        |Pearson/Kendall/Spearman correlation|, |cosine similarity|, or mutual
+        information. We use the association value uniformly (not the p-value),
+        since cosine and mutual information have no p-value; for the correlation
+        methods, ranking by |r| is identical to ranking by p-value at fixed n.
 
-        # Handle mutual information separately
+        Default DESCENDING: features are returned most-important first, so
+        rank_deletion prunes edges around the MOST target-relevant features
+        first. This was the better direction on 11/12 (similarity x dataset)
+        forward-KPI cells in our analysis. Set RANK_DESC=0 to restore ascending
+        (least-relevant pruned first).
+        """
+        descending = os.environ.get("RANK_DESC", "1") == "1"
+
         if method == "mutual_info":
             from sklearn.feature_selection import (
                 mutual_info_classif,
                 mutual_info_regression,
             )
 
+            X_array = X.to_numpy() if isinstance(X, pd.DataFrame) else X
+            yy = y.ravel() if y.ndim > 1 else y
             is_classification = len(np.unique(y)) < 10
+            estimator = (
+                mutual_info_classif if is_classification else mutual_info_regression
+            )
+            scores = estimator(X_array, yy)
+            order = np.argsort(scores)  # ascending importance
+            if descending:
+                order = order[::-1]
+            return order.tolist()
 
-            if isinstance(X, pd.DataFrame):
-                X_array = X.to_numpy()
-            else:
-                X_array = X
+        score_func = {
+            "pearsonr": lambda x, t: abs(pearsonr(x, t)[0]),
+            "kendalltau": lambda x, t: abs(kendalltau(x, t)[0]),
+            "spearmanr": lambda x, t: abs(spearmanr(x, t)[0]),
+            "cosine": lambda x, t: abs(1 - cosine(x, t)),
+        }
+        if method not in score_func:
+            raise ValueError(f"Method {method} not supported")
+        score = score_func[method]
 
-            if is_classification:
-                mi_scores = mutual_info_classif(X_array, y.ravel() if y.ndim > 1 else y)
-            else:
-                mi_scores = mutual_info_regression(
-                    X_array, y.ravel() if y.ndim > 1 else y
-                )
-
-            return np.argsort(mi_scores)[::-1].tolist()
-
-        correlation_func = method_map[method]
-        use_pvalue = method in ["pearsonr", "kendalltau", "spearmanr"]
-
-        values = {}
         if isinstance(X, pd.DataFrame):
-            for col in X.columns:
-                if use_pvalue:
-                    values[col] = correlation_func(X[col], y)[1]
-                else:
-                    result = correlation_func(X[col], y)
-                    values[col] = result if np.isscalar(result) else result[0]
-            values_rank = sorted(values, key=values.get, reverse=use_pvalue)
-            return [X.columns.get_loc(col) for col in values_rank]
+            values = {col: score(X[col].values, y) for col in X.columns}
+            ranked = sorted(values, key=values.get, reverse=descending)
+            return [X.columns.get_loc(col) for col in ranked]
         else:
-            n_features = X.shape[1]
-            for i in range(n_features):
-                if use_pvalue:
-                    values[i] = correlation_func(X[:, i], y)[1]
-                else:
-                    result = correlation_func(X[:, i], y)
-                    values[i] = result if np.isscalar(result) else result[0]
-            return sorted(values, key=values.get, reverse=use_pvalue)
+            values = {i: score(X[:, i], y) for i in range(X.shape[1])}
+            return sorted(values, key=values.get, reverse=descending)
 
     # Mapping of correlation method names to pandas method names (for vectorized computation)
     _CORRELATION_PANDAS_METHODS: Dict[str, str] = {
@@ -643,6 +645,37 @@ class GraphBuilder:
             )
 
         return similarity_matrix
+
+    @staticmethod
+    def to_collaborator_map(G: nx.Graph) -> Dict[int, List[int]]:
+        """Build a collaborator map from a graph.
+
+        Each node is mapped to a list containing itself and all of its
+        immediate neighbours.  Node labels (integer or string) are converted
+        to 0-based integer indices that match the order returned by
+        ``list(G.nodes())``.
+
+        This is the canonical bridge between a shapG graph and downstream
+        projects (e.g. ``strategy_inputs``) that need a coalition-candidate
+        set per player expressed as integer indices.
+
+        Args:
+            G: NetworkX graph.
+
+        Returns:
+            ``Dict[int, List[int]]`` mapping each node index to
+            ``[self_index] + sorted(neighbour_indices)``.
+        """
+        nodes = list(G.nodes())
+        node_to_idx: Dict = {node: i for i, node in enumerate(nodes)}
+
+        result: Dict[int, List[int]] = {}
+        for node in nodes:
+            idx = node_to_idx[node]
+            neighbour_idxs = sorted(node_to_idx[nb] for nb in G.neighbors(node))
+            result[idx] = [idx] + neighbour_idxs
+
+        return result
 
 
 class CoalitionManager:

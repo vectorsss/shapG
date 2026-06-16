@@ -25,6 +25,10 @@ class ShapGExplainer(GraphExplainer):
     """Fast approximate Shapley value computation using local search and sampling.
 
     This implementation matches the original ShapG algorithm exactly.
+
+    When the characteristic function returns per-sample values (via
+    ``batch_compute``), Shapley values are computed per-sample and the
+    result is ``Dict[int, np.ndarray]``.  Otherwise ``Dict[int, float]``.
     """
 
     def __init__(
@@ -247,7 +251,7 @@ class ShapGExplainer(GraphExplainer):
         Returns:
             Shapley value for the node
         """
-        reachable_nodes_list = list(reachable_nodes)
+        reachable_nodes_list = sorted(reachable_nodes)
         sample_nums = self._calculate_sample_nums(len(reachable_nodes))
         coeff = self._calculate_sampling_coefficient(len(reachable_nodes), sample_nums)
 
@@ -284,9 +288,11 @@ class ShapGExplainer(GraphExplainer):
             )
 
     def _apply_ratio_approximation(
-        self, shapley_values: Dict[int, float], full_coalition_value: float
-    ) -> Dict[int, float]:
+        self, shapley_values: Dict, full_coalition_value
+    ) -> Dict:
         """Apply ratio-based approximation to scale Shapley values.
+
+        Supports both scalar and per-sample (array) values.
 
         Args:
             shapley_values: Computed Shapley values
@@ -296,17 +302,138 @@ class ShapGExplainer(GraphExplainer):
             Scaled Shapley values
         """
         approximated_sum = sum(shapley_values.values())
-        if approximated_sum > 0:
-            scale_factor = full_coalition_value / approximated_sum
+        if np.isscalar(approximated_sum):
+            if approximated_sum > 0:
+                scale_factor = full_coalition_value / approximated_sum
+                return {
+                    node: val * scale_factor for node, val in shapley_values.items()
+                }
+        else:
+            # Per-sample: element-wise ratio, avoiding division by zero
+            nonzero = approximated_sum != 0
+            safe_sum = np.where(nonzero, approximated_sum, 1.0)
+            scale_factor = np.where(nonzero, full_coalition_value / safe_sum, 0.0)
             return {node: val * scale_factor for node, val in shapley_values.items()}
         return shapley_values
 
+    # ------------------------------------------------------------------
+    # Per-sample path: collect all coalitions, batch-evaluate, accumulate
+    # ------------------------------------------------------------------
+
+    def _collect_node_coalitions(self, node):
+        """Collect all (S, S∪{node}, coeff) entries for one node.
+
+        Returns:
+            list of (S_tuple, S_with_node_tuple, coeff) triples
+        """
+        reachable_nodes = self._get_reachable_nodes(node)
+        entries = []
+
+        if len(reachable_nodes) < self.m:
+            # Small coalition: exact enumeration
+            reachable_nodes.add(node)
+            coeff = 1 / 2 ** (len(reachable_nodes) - 1)
+            for S_size in range(len(reachable_nodes)):
+                for S in itertools.combinations(reachable_nodes - {node}, S_size):
+                    S_tuple = tuple(sorted(S))
+                    S_with = tuple(sorted(S + (node,)))
+                    entries.append((S_tuple, S_with, coeff))
+        else:
+            # Large coalition: sampling
+            reachable_nodes_list = sorted(reachable_nodes)
+            sample_nums = self._calculate_sample_nums(len(reachable_nodes))
+            coeff = self._calculate_sampling_coefficient(
+                len(reachable_nodes), sample_nums
+            )
+            for _ in range(sample_nums):
+                sampled = set(
+                    random.sample(
+                        reachable_nodes_list,
+                        min(self.m, len(reachable_nodes_list)),
+                    )
+                )
+                sampled.add(node)
+                for S_size in range(len(sampled)):
+                    for S in itertools.combinations(sampled - {node}, S_size):
+                        S_tuple = tuple(sorted(S))
+                        S_with = tuple(sorted(S + (node,)))
+                        entries.append((S_tuple, S_with, coeff))
+
+        return entries
+
+    def _explain_per_sample(self) -> Dict[int, np.ndarray]:
+        """Compute per-sample Shapley values using batch_compute.
+
+        Collects all unique coalitions across all nodes, evaluates them
+        in a single ``batch_compute()`` call, then accumulates weighted
+        marginal contributions per node.
+
+        Returns:
+            Dict mapping node id to per-sample Shapley value array.
+        """
+        nodes = list(self.graph.nodes())
+
+        # Phase 1: collect all (S, S∪{i}, coeff) triples per node
+        all_coalitions_set: Set[Tuple[int, ...]] = set()
+        node_entries: Dict[int, List] = {}
+
+        for node in nodes:
+            entries = self._collect_node_coalitions(node)
+            node_entries[node] = entries
+            for s_off, s_on, _ in entries:
+                all_coalitions_set.add(s_off)
+                all_coalitions_set.add(s_on)
+
+        # Ensure full coalition is included (needed for ratio approximation)
+        full_coalition_tuple = tuple(sorted(nodes))
+        all_coalitions_set.add(full_coalition_tuple)
+
+        # Phase 2: batch-evaluate all unique coalitions
+        unique_coalitions = list(all_coalitions_set)
+        coalition_index = {c: i for i, c in enumerate(unique_coalitions)}
+        coalition_sets = [set(c) for c in unique_coalitions]
+
+        all_values = self.characteristic_function.batch_compute(
+            coalition_sets, self.graph
+        )
+        # shape: (n_coalitions, n_data_samples)
+
+        n_data_samples = all_values.shape[1]
+
+        # Phase 3: accumulate per-node Shapley values
+        shapley_values: Dict[int, np.ndarray] = {
+            node: np.zeros(n_data_samples) for node in nodes
+        }
+
+        node_iterator = (
+            tqdm(nodes, desc="Computing ShapG values") if self.verbose else nodes
+        )
+        for node in node_iterator:
+            for s_off, s_on, coeff in node_entries[node]:
+                v_off = all_values[coalition_index[s_off]]
+                v_on = all_values[coalition_index[s_on]]
+                shapley_values[node] += coeff * (v_on - v_off)
+
+        # Phase 4: ratio approximation
+        if self.approximate_by_ratio:
+            full_coalition = tuple(sorted(nodes))
+            full_value = all_values[coalition_index[full_coalition]]
+            shapley_values = self._apply_ratio_approximation(shapley_values, full_value)
+
+        return shapley_values
+
+    # ------------------------------------------------------------------
+    # Main entry point
+    # ------------------------------------------------------------------
+
     def explain(
         self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
-    ) -> Dict[int, float]:
+    ) -> Dict:
         """Compute approximate Shapley values using original ShapG algorithm.
 
-        This implements the EXACT algorithm from the original shapG function.
+        When the characteristic function's ``batch_compute`` returns 2-D
+        output (per-sample), returns ``Dict[int, np.ndarray]``.  Otherwise
+        returns ``Dict[int, float]``.
 
         Args:
             X: Optional input (uses fitted data if None)
@@ -320,7 +447,18 @@ class ShapGExplainer(GraphExplainer):
         elif not self._fitted:
             raise ValueError("Explainer not fitted. Call fit() first or provide X.")
 
-        # Initialize
+        # Detect per-sample mode by probing batch_compute
+        per_sample = (
+            hasattr(self.characteristic_function, "batch_compute")
+            and self.characteristic_function.batch_compute([set()], self.graph).ndim
+            == 2
+        )
+
+        if per_sample:
+            return self._explain_per_sample()
+
+        # --- Scalar path (original algorithm, unchanged) ---
+
         shapley_values = {node: 0.0 for node in self.graph.nodes()}
 
         # Compute full coalition value if using ratio approximation

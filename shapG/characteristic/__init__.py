@@ -14,6 +14,7 @@ from .model_based import (
     ModelBasedCharacteristic,
     GraphModelCharacteristic,
     EnsembleMaskingCharacteristic,
+    BatchedModelCharacteristic,
 )
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "ModelBasedCharacteristic",
     "GraphModelCharacteristic",
     "EnsembleMaskingCharacteristic",
+    "BatchedModelCharacteristic",
 ]

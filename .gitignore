@@ -190,3 +190,6 @@ visualizations/
 
 # MPL cache
 .mpl/
+
+# Example output
+examples/quickstart_importance.png

@@ -941,5 +941,239 @@ class TestEdgeCases(unittest.TestCase):
         self.assertAlmostEqual(sum(values.values()), 3.0, places=6)
 
 
+class TestExactExplainerBatched(unittest.TestCase):
+    """Tests for ExactExplainer using BatchedModelCharacteristic."""
+
+    def _make_linear_model_and_data(self, n_features=4, n_samples=30, seed=0):
+        """Return (model, X, y) with a simple sklearn LinearRegression."""
+        from sklearn.linear_model import LinearRegression
+
+        rng = np.random.default_rng(seed)
+        X = rng.standard_normal((n_samples, n_features))
+        coef = rng.standard_normal(n_features)
+        y = X @ coef
+        model = LinearRegression().fit(X, y)
+        return model, X, y
+
+    def test_batch_matches_per_coalition(self):
+        """ExactExplainer + BatchedModelCharacteristic agrees with ModelBasedCharacteristic."""
+        from shapG.characteristic import (
+            ModelBasedCharacteristic,
+            BatchedModelCharacteristic,
+        )
+        from sklearn.metrics import r2_score
+
+        model, X, y = self._make_linear_model_and_data(n_features=4)
+
+        # Both characteristic functions use the same masking strategy (feature means).
+        char_batched = BatchedModelCharacteristic(
+            model=model,
+            X=X,
+            y=y,
+            metric_fn=lambda yt, yp: r2_score(yt, yp),
+        )
+        char_scalar = ModelBasedCharacteristic(
+            model=model,
+            X=X,
+            y=y,
+            masking_strategy="mean",
+            metric_fn=lambda yt, yp: r2_score(yt, yp),
+        )
+
+        G = nx.path_graph(4)
+
+        vals_batched = ExactExplainer(char_batched).fit_explain(G)
+        vals_scalar = ExactExplainer(char_scalar).fit_explain(G)
+
+        for node in G.nodes():
+            self.assertAlmostEqual(
+                float(vals_batched[node]),
+                float(vals_scalar[node]),
+                places=8,
+                msg=f"Mismatch at node {node}",
+            )
+
+    def test_per_sample_output_shape(self):
+        """batch_compute with per-sample metric gives Dict[int, np.ndarray]."""
+        from shapG.characteristic import BatchedModelCharacteristic
+        from sklearn.linear_model import LinearRegression
+
+        n_samples, n_features = 20, 3
+        rng = np.random.default_rng(1)
+        X = rng.standard_normal((n_samples, n_features))
+        y = X[:, 0]
+        model = LinearRegression().fit(X, y)
+
+        # Per-sample squared error
+        def per_sample_se(y_true, y_pred):
+            return (y_true - y_pred) ** 2  # shape (n_samples,)
+
+        char_fn = BatchedModelCharacteristic(
+            model=model,
+            X=X,
+            y=y,
+            metric_fn=per_sample_se,
+        )
+
+        G = nx.path_graph(3)
+        explainer = ExactExplainer(char_fn)
+        explainer.fit(G)
+        vals = explainer.explain()
+
+        # Each Shapley value should be a 1-D array of length n_samples
+        self.assertEqual(len(vals), 3)
+        for node, sv in vals.items():
+            self.assertIsInstance(
+                sv, np.ndarray, msg=f"Node {node} value should be ndarray"
+            )
+            self.assertEqual(sv.shape, (n_samples,), msg=f"Node {node} shape mismatch")
+
+        # Efficiency axiom: column-wise sum across nodes ≈ (v(all) - v(empty)) per sample
+        total_shap = sum(vals.values())  # (n_samples,)
+        v_all = char_fn.batch_compute([set(G.nodes())])[0]  # (n_samples,)
+        v_empty = char_fn.batch_compute([set()])[0]  # (n_samples,)
+        np.testing.assert_allclose(total_shap, v_all - v_empty, rtol=1e-6)
+
+
+class TestShapGExplainerPerSample(unittest.TestCase):
+    """Tests for ShapGExplainer with per-sample characteristic functions."""
+
+    def _make(self, n_features=4, n_samples=20, seed=0):
+        from shapG.characteristic import BatchedModelCharacteristic
+
+        rng = np.random.default_rng(seed)
+        X = rng.standard_normal((n_samples, n_features))
+        y = X[:, 0] + 0.5 * X[:, 1] + rng.standard_normal(n_samples) * 0.5
+
+        class SimpleModel:
+            """Intentionally imperfect: only uses first 2 features."""
+
+            def fit(self, X, y):
+                return self
+
+            def predict(self, X):
+                return X[:, 0] * 0.8 + X[:, 1] * 0.3
+
+        model = SimpleModel().fit(X, y)
+        per_sample_se = lambda yt, yp: -((yt - yp) ** 2)
+        char_fn = BatchedModelCharacteristic(
+            model=model, X=X, y=y, metric_fn=per_sample_se
+        )
+        return char_fn, n_samples, n_features
+
+    def test_per_sample_output_shape(self):
+        """ShapGExplainer with per-sample metric returns Dict[int, np.ndarray]."""
+        char_fn, n_samples, n_features = self._make()
+        G = nx.path_graph(n_features)
+        vals = ShapGExplainer(char_fn, depth=1, n_samples=5).fit_explain(G)
+
+        self.assertEqual(len(vals), n_features)
+        for node, sv in vals.items():
+            self.assertIsInstance(sv, np.ndarray, msg=f"Node {node}")
+            self.assertEqual(sv.shape, (n_samples,), msg=f"Node {node} shape")
+
+    def test_scalar_mode_unchanged(self):
+        """ShapGExplainer with scalar metric still returns Dict[int, float]."""
+        from sklearn.linear_model import LinearRegression
+        from sklearn.metrics import r2_score
+        from shapG.characteristic import BatchedModelCharacteristic
+
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((20, 4))
+        y = X[:, 0]
+        model = LinearRegression().fit(X, y)
+        char_fn = BatchedModelCharacteristic(
+            model=model,
+            X=X,
+            y=y,
+            metric_fn=lambda yt, yp: r2_score(yt, yp),
+        )
+        G = nx.path_graph(4)
+        vals = ShapGExplainer(char_fn, depth=1, n_samples=5).fit_explain(G)
+
+        for node, sv in vals.items():
+            self.assertIsInstance(sv, (int, float, np.floating), msg=f"Node {node}")
+
+    def test_per_sample_efficiency_with_ratio(self):
+        """Ratio approximation scales sum of Shapley values to v(N) per sample."""
+        char_fn, n_samples, n_features = self._make()
+        G = nx.path_graph(n_features)
+        vals = ShapGExplainer(
+            char_fn, depth=1, n_samples=5, approximate_by_ratio=True
+        ).fit_explain(G)
+
+        total_shap = sum(vals.values())
+        v_all = char_fn.batch_compute([set(G.nodes())])[0]
+        np.testing.assert_allclose(total_shap, v_all, atol=1e-10)
+
+
+class TestCISExplainerPerSample(unittest.TestCase):
+    """Tests for CISExplainer with per-sample characteristic functions."""
+
+    def _make(self, n_features=4, n_samples=20, seed=0):
+        from shapG.characteristic import BatchedModelCharacteristic
+
+        rng = np.random.default_rng(seed)
+        X = rng.standard_normal((n_samples, n_features))
+        y = X[:, 0] + 0.5 * X[:, 1] + rng.standard_normal(n_samples) * 0.5
+
+        class SimpleModel:
+            def fit(self, X, y):
+                return self
+
+            def predict(self, X):
+                return X[:, 0] * 0.8 + X[:, 1] * 0.3
+
+        model = SimpleModel().fit(X, y)
+        per_sample_se = lambda yt, yp: -((yt - yp) ** 2)
+        char_fn = BatchedModelCharacteristic(
+            model=model, X=X, y=y, metric_fn=per_sample_se
+        )
+        return char_fn, n_samples, n_features
+
+    def test_per_sample_output_shape(self):
+        """CISExplainer with per-sample metric returns Dict[int, np.ndarray]."""
+        char_fn, n_samples, n_features = self._make()
+        G = nx.complete_graph(n_features)
+        vals = CISExplainer(characteristic_function=char_fn).fit_explain(G)
+
+        self.assertEqual(len(vals), n_features)
+        for node, sv in vals.items():
+            self.assertIsInstance(sv, np.ndarray, msg=f"Node {node}")
+            self.assertEqual(sv.shape, (n_samples,), msg=f"Node {node} shape")
+
+    def test_scalar_mode_unchanged(self):
+        """CISExplainer with scalar metric still returns Dict[int, float]."""
+        from sklearn.linear_model import LinearRegression
+        from sklearn.metrics import r2_score
+        from shapG.characteristic import BatchedModelCharacteristic
+
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((20, 4))
+        y = X[:, 0]
+        model = LinearRegression().fit(X, y)
+        char_fn = BatchedModelCharacteristic(
+            model=model,
+            X=X,
+            y=y,
+            metric_fn=lambda yt, yp: r2_score(yt, yp),
+        )
+        G = nx.complete_graph(4)
+        vals = CISExplainer(characteristic_function=char_fn).fit_explain(G)
+
+        for node, sv in vals.items():
+            self.assertIsInstance(sv, (int, float, np.floating), msg=f"Node {node}")
+
+    def test_per_sample_efficiency(self):
+        """Sum of CIS values = grand coalition value, per sample."""
+        char_fn, n_samples, n_features = self._make()
+        G = nx.complete_graph(n_features)
+        vals = CISExplainer(characteristic_function=char_fn).fit_explain(G)
+
+        total_cis = sum(vals.values())
+        v_grand = char_fn.batch_compute([set(G.nodes())])[0]
+        np.testing.assert_allclose(total_cis, v_grand, atol=1e-10)
+
+
 if __name__ == "__main__":
     unittest.main()

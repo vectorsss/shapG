@@ -58,6 +58,8 @@ from .explainer import (
     LeverageScoreExplainer,
     MultilinearExplainer,
     StratifiedShapleyExplainer,
+    MarkovianExplainer,
+    PermutationExplainer,
 )
 
 from .characteristic import (
@@ -66,6 +68,7 @@ from .characteristic import (
     WeightedSum,
     CustomFunction,
     CenterOfImputationSet,
+    BatchedModelCharacteristic,
 )
 
 from .utils import (
@@ -110,12 +113,15 @@ __all__ = [
     "LeverageScoreExplainer",
     "MultilinearExplainer",
     "StratifiedShapleyExplainer",
+    "MarkovianExplainer",
+    "PermutationExplainer",
     # New API - Characteristic functions
     "CoalitionDegree",
     "NodeCount",
     "WeightedSum",
     "CustomFunction",
     "CenterOfImputationSet",
+    "BatchedModelCharacteristic",
     # New API - Graph construction
     "GraphBuilder",
     "CoalitionManager",

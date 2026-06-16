@@ -19,24 +19,24 @@ References:
         "Provably Accurate Shapley Value Estimation via Leverage Score Sampling"
 """
 
-from typing import Dict, Set, Union, Optional, Tuple, List, Callable, Any
+import warnings
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+
+import networkx as nx
 import numpy as np
 import pandas as pd
-import networkx as nx
-import warnings
-
 from scipy.fft import idct
 
-from .base import Explainer, CharacteristicFunction
 from ..characteristic.characteristic_functions import CoalitionDegree
 
 # Import from submodules
 from ._stratified import (
-    SamplingStats,
-    StratifiedCoalitionSampler,
     ImplicitDCTOperator,
     L1Solver,
+    SamplingStats,
+    StratifiedCoalitionSampler,
 )
+from .base import CharacteristicFunction, Explainer
 
 # Re-export for backward compatibility
 __all__ = [
@@ -135,60 +135,6 @@ class StratifiedShapleyExplainer(Explainer):
         self._context = None  # Context passed to characteristic function
         self._sampler = None
         self._rng = np.random.default_rng(seed)
-
-    def _parse_input(
-        self,
-        X: Union[int, np.ndarray, pd.DataFrame, nx.Graph, List],
-        context: Optional[Any] = None,
-    ) -> Tuple[int, List, Any]:
-        """Parse input to extract player count, identifiers, and context.
-
-        Args:
-            X: Input that defines players. Can be:
-               - int: number of players (ids will be 0..n-1)
-               - nx.Graph: n = number_of_nodes(), ids = nodes()
-               - pd.DataFrame: n = number of columns, ids = column names
-               - np.ndarray: n = number of columns (2D) or length (1D)
-               - List: n = length, ids = elements or indices
-            context: Optional context for characteristic function.
-                     If None and X is Graph/DataFrame/array, X is used as context.
-
-        Returns:
-            Tuple of (n_players, player_ids, context)
-        """
-        if isinstance(X, int):
-            n = X
-            player_ids = list(range(n))
-            ctx = context
-        elif isinstance(X, nx.Graph):
-            n = X.number_of_nodes()
-            player_ids = list(X.nodes())
-            ctx = context if context is not None else X
-        elif isinstance(X, pd.DataFrame):
-            n = X.shape[1]
-            player_ids = list(X.columns)
-            ctx = context if context is not None else X
-        elif isinstance(X, np.ndarray):
-            if X.ndim == 1:
-                n = len(X)
-            else:
-                n = X.shape[1]
-            player_ids = list(range(n))
-            ctx = context if context is not None else X
-        elif isinstance(X, list):
-            n = len(X)
-            try:
-                if len(set(X)) == len(X):
-                    player_ids = list(X)
-                else:
-                    player_ids = list(range(n))
-            except TypeError:
-                player_ids = list(range(n))
-            ctx = context
-        else:
-            raise ValueError(f"Unsupported input type: {type(X)}")
-
-        return n, player_ids, ctx
 
     def fit(
         self,

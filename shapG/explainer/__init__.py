@@ -14,6 +14,8 @@ from .improved_block_qrcs import ImprovedBlockQRCSExplainer
 from .leverage_shap import LeverageScoreExplainer
 from .multilinear import MultilinearExplainer
 from .stratified_shapley import StratifiedShapleyExplainer
+from .markovian import MarkovianExplainer
+from .permutation import PermutationExplainer
 
 __all__ = [
     # Base classes
@@ -32,4 +34,6 @@ __all__ = [
     "LeverageScoreExplainer",
     "MultilinearExplainer",
     "StratifiedShapleyExplainer",
+    "MarkovianExplainer",
+    "PermutationExplainer",
 ]

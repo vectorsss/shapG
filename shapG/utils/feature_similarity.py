@@ -1,9 +1,10 @@
 """Feature similarity calculation with type awareness."""
 
+import os
+
 import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, chi2_contingency
-from scipy.spatial.distance import hamming, jaccard
 from sklearn.metrics import mutual_info_score
 from typing import Dict, List, Optional, Tuple
 
@@ -105,15 +106,10 @@ def calculate_mixed_similarity_matrix(X, feature_types=None, feature_ranges=None
                     sim = 0.0
 
             elif type_i == "binary" and type_j == "binary":
-                # Use Jaccard similarity for binary features
+                # Use Cramér's V: unlike Jaccard, it is chance-corrected
+                # (independent binary noise scores ~0 instead of ~0.33)
                 try:
-                    # Convert to binary if needed
-                    x_i_bin = (x_i > 0).astype(int)
-                    x_j_bin = (x_j > 0).astype(int)
-                    # Jaccard = intersection / union
-                    intersection = np.sum((x_i_bin == 1) & (x_j_bin == 1))
-                    union = np.sum((x_i_bin == 1) | (x_j_bin == 1))
-                    sim = intersection / union if union > 0 else 0.0
+                    sim = cramers_v(x_i, x_j)
                 except (ValueError, TypeError, ZeroDivisionError):
                     sim = 0.0
 
@@ -267,9 +263,15 @@ def get_feature_ranking_mixed(X, y, feature_types=None, feature_ranges=None):
         except (ValueError, TypeError, ZeroDivisionError):
             importance_scores[i] = 0.0
 
-    # Sort by importance (ascending - least important first for removal)
+    # Sort by importance. Default DESCENDING: prune edges around the MOST
+    # target-relevant features first. This was the better direction on 11/12
+    # (similarity x dataset) forward-KPI cells in our analysis. Set
+    # MIXED_RANK_DESC=0 to restore ascending (least-relevant pruned first).
+    descending = os.environ.get("MIXED_RANK_DESC", "1") == "1"
     sorted_indices = sorted(
-        importance_scores.keys(), key=lambda k: importance_scores[k]
+        importance_scores.keys(),
+        key=lambda k: importance_scores[k],
+        reverse=descending,
     )
 
     return sorted_indices

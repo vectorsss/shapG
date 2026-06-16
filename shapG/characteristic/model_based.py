@@ -5,7 +5,7 @@ These classes provide efficient characteristic functions for pre-trained models,
 avoiding the computational cost of retraining for each coalition evaluation.
 """
 
-from typing import Set, Optional, Any, Callable, Union
+from typing import Set, List, Optional, Any, Callable, Union
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -362,3 +362,217 @@ class EnsembleMaskingCharacteristic(CharacteristicFunction):
         """
         scores = [cf(coalition, context) for cf in self.char_funcs]
         return float(np.mean(scores))
+
+
+class BatchedModelCharacteristic(CharacteristicFunction):
+    """
+    Batched characteristic function for pre-trained models — 2D and 3D data.
+
+    Unlike ``ModelBasedCharacteristic``, which calls ``model.predict()`` once per
+    coalition, this class stacks the masked data for **all** coalitions into a
+    single array and issues a single ``model.predict()`` call.  This makes it
+    suitable for neural-network models (e.g. TensorFlow/Keras) where prediction
+    overhead per call is significant.
+
+    Supports:
+
+    * 2-D data ``(n_samples, n_features)`` — standard tabular features.
+    * 3-D data ``(n_samples, timesteps, n_features)`` — time-series features;
+      the feature mask is broadcast across the time axis.
+
+    ``batch_compute()`` returns:
+
+    * ``shape (n_coalitions,)`` when ``metric_fn`` returns a scalar.
+    * ``shape (n_coalitions, n_samples)`` when ``metric_fn`` returns an array —
+      e.g. per-sample log-loss.  ``ExactExplainer`` then returns
+      ``Dict[int, np.ndarray]`` (per-sample Shapley values).
+
+    Example::
+
+        >>> import numpy as np
+        >>> from sklearn.linear_model import LinearRegression
+        >>> from shapG.characteristic import BatchedModelCharacteristic
+        >>> from shapG import ExactExplainer
+        >>> import networkx as nx
+        >>>
+        >>> X = np.random.randn(50, 4)
+        >>> y = X[:, 0] + X[:, 1]
+        >>> model = LinearRegression().fit(X, y)
+        >>>
+        >>> char_fn = BatchedModelCharacteristic(
+        ...     model=model, X=X, y=y,
+        ...     metric_fn=lambda yt, yp: float(np.mean((yt - yp) ** 2))
+        ... )
+        >>>
+        >>> G = nx.path_graph(4)
+        >>> explainer = ExactExplainer(characteristic_function=char_fn)
+        >>> shap_vals = explainer.fit_explain(G)
+    """
+
+    def __init__(
+        self,
+        model: Any,
+        X: np.ndarray,
+        y: np.ndarray,
+        metric_fn: Callable,
+        mask_value: Optional[Union[np.ndarray, float]] = None,
+        name: Optional[str] = None,
+        chunk_size: Optional[int] = None,
+    ):
+        """
+        Initialize the batched model characteristic function.
+
+        Args:
+            model: Pre-trained model with a ``.predict()`` method.
+            X: Data array of shape ``(n_samples, n_features)`` or
+               ``(n_samples, timesteps, n_features)``.
+            y: True labels/values for *X*, shape ``(n_samples,)`` or
+               ``(n_samples, ...)``.
+            metric_fn: ``Callable(y_true, y_pred) -> scalar or array``.
+                       If the callable returns a Python/numpy scalar the return
+                       shape of ``batch_compute`` is ``(n_coalitions,)``.  If it
+                       returns an array the return shape is
+                       ``(n_coalitions, *array.shape)``.
+            mask_value: Baseline used for features *not* in a coalition.
+                        ``None`` → per-feature means (mean over samples and,
+                        for 3-D data, also over the time axis).
+                        ``float`` → constant fill value.
+                        ``np.ndarray`` of shape ``(n_features,)`` → per-feature
+                        baseline supplied by the caller.
+            name: Optional display name.
+            chunk_size: Default chunk size used by ``batch_compute()`` when no
+                        per-call override is supplied.  ``None`` means process
+                        all coalitions in a single ``model.predict()`` call.
+        """
+        super().__init__(name or "BatchedModel")
+        self.model = model
+        self.X = np.asarray(X)
+        self.y = np.asarray(y)
+        self.metric_fn = metric_fn
+        self.chunk_size = chunk_size
+
+        if self.X.ndim == 2:
+            self.n_samples, self.n_features = self.X.shape
+            self._is_3d = False
+        elif self.X.ndim == 3:
+            self.n_samples, self.timesteps, self.n_features = self.X.shape
+            self._is_3d = True
+        else:
+            raise ValueError(f"X must be 2-D or 3-D, got shape {self.X.shape}")
+
+        if mask_value is None:
+            if self._is_3d:
+                self.baseline = self.X.mean(axis=(0, 1))  # (n_features,)
+            else:
+                self.baseline = self.X.mean(axis=0)  # (n_features,)
+        elif isinstance(mask_value, (int, float)):
+            self.baseline = np.full(self.n_features, float(mask_value))
+        else:
+            self.baseline = np.asarray(mask_value, dtype=float)
+            if self.baseline.shape != (self.n_features,):
+                raise ValueError(
+                    f"mask_value shape {self.baseline.shape} must be ({self.n_features},)"
+                )
+
+    def __call__(self, coalition: Set[int], context: Optional[Any] = None):
+        """Evaluate a single coalition.
+
+        Delegates to ``batch_compute()``.  Returns a scalar when
+        ``metric_fn`` returns a scalar, or an array when it returns
+        per-sample values.
+
+        Args:
+            coalition: Set of feature indices to keep.
+            context: Unused (for API compatibility).
+
+        Returns:
+            Scalar or array characteristic value, depending on ``metric_fn``.
+        """
+        result = self.batch_compute([coalition], context)[0]
+        if np.ndim(result) == 0:
+            return float(result)
+        return result
+
+    def _compute_chunk(self, coalitions: List[Set[int]]) -> np.ndarray:
+        """Evaluate a list of coalitions with a single ``model.predict()`` call.
+
+        Args:
+            coalitions: List of coalitions (each a set of integer feature indices).
+
+        Returns:
+            ``np.ndarray`` of shape ``(n_coalitions,)`` or ``(n_coalitions, ...)``.
+        """
+        n_coalitions = len(coalitions)
+
+        if self._is_3d:
+            X_batched = np.empty(
+                (n_coalitions * self.n_samples, self.timesteps, self.n_features),
+                dtype=self.X.dtype,
+            )
+        else:
+            X_batched = np.empty(
+                (n_coalitions * self.n_samples, self.n_features),
+                dtype=self.X.dtype,
+            )
+
+        for ci, coalition in enumerate(coalitions):
+            # Binary mask: 1 = keep feature, 0 = replace with baseline
+            mask = np.zeros(self.n_features, dtype=float)
+            for f in coalition:
+                if 0 <= f < self.n_features:
+                    mask[f] = 1.0
+
+            start = ci * self.n_samples
+            end = (ci + 1) * self.n_samples
+            # numpy broadcasts mask (n_features,) over (n_samples [, timesteps], n_features)
+            X_batched[start:end] = self.X * mask + self.baseline * (1.0 - mask)
+
+        # Single model call for all coalitions in this chunk
+        y_pred_all = self.model.predict(X_batched)
+
+        # Align y shape with predictions to avoid broadcasting cross-product
+        # (e.g., model wrapper may flatten 3D→2D while self.y stays 3D)
+        y_ref = self.y
+        if y_pred_all.ndim != y_ref.ndim:
+            y_ref = y_ref.reshape(y_ref.shape[0], -1)
+
+        results = []
+        for ci in range(n_coalitions):
+            start = ci * self.n_samples
+            end = (ci + 1) * self.n_samples
+            score = self.metric_fn(y_ref, y_pred_all[start:end])
+            results.append(score)
+
+        return np.array(results)
+
+    def batch_compute(
+        self,
+        coalitions: List[Set[int]],
+        context: Optional[Any] = None,
+        chunk_size: Optional[int] = None,
+    ) -> np.ndarray:
+        """Evaluate all coalitions, optionally splitting into memory-safe chunks.
+
+        Args:
+            coalitions: List of coalitions (each a set of integer feature indices).
+            context: Unused (for API compatibility).
+            chunk_size: If set, process at most this many coalitions per
+                ``model.predict()`` call.  Useful when ``len(coalitions)`` is
+                large and a single batched call would exhaust GPU/CPU memory.
+                ``None`` falls back to the ``chunk_size`` set in ``__init__``;
+                if that is also ``None``, all coalitions are processed in one
+                call.
+
+        Returns:
+            ``np.ndarray`` of shape ``(n_coalitions,)`` when ``metric_fn``
+            returns a scalar, or ``(n_coalitions, ...)`` when it returns an
+            array.
+        """
+        effective_chunk = chunk_size if chunk_size is not None else self.chunk_size
+        if effective_chunk is None or len(coalitions) <= effective_chunk:
+            return self._compute_chunk(coalitions)
+
+        parts = []
+        for i in range(0, len(coalitions), effective_chunk):
+            parts.append(self._compute_chunk(coalitions[i : i + effective_chunk]))
+        return np.concatenate(parts)

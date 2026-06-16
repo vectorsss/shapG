@@ -70,12 +70,15 @@ class CISExplainer(GraphExplainer):
 
     def explain(
         self, X: Optional[Union[np.ndarray, pd.DataFrame, nx.Graph]] = None, **kwargs
-    ) -> Dict[int, float]:
+    ) -> Dict:
         """Compute CIS values for all nodes.
 
         The CIS value for each node is its individual contribution plus
         an equal share of the surplus (grand coalition value minus sum of individual values).
-        This matches the original cis() function exactly.
+
+        When the characteristic function returns per-sample values (via
+        ``batch_compute``), the result is ``Dict[int, np.ndarray]`` with
+        per-sample CIS values.  Otherwise ``Dict[int, float]``.
 
         Args:
             X: Optional input (uses fitted data if None)
@@ -92,20 +95,26 @@ class CISExplainer(GraphExplainer):
         nodes = list(self.graph.nodes())
         n_nodes = len(nodes)
 
-        grand_coalition = set(nodes)
-        grand_coalition_value = self.characteristic_function(
-            grand_coalition, self.graph
-        )
+        # Batch-evaluate grand coalition + all singletons in one call
+        coalitions = [set(nodes)] + [{node} for node in nodes]
+        values = self.characteristic_function.batch_compute(coalitions, self.graph)
+        per_sample = values.ndim == 2
 
-        individual_values = {}
-        for node in nodes:
-            individual_values[node] = self.characteristic_function({node}, self.graph)
+        grand_coalition_value = values[0]
+        individual_values = {nodes[i]: values[i + 1] for i in range(n_nodes)}
 
         total_individual_value = sum(individual_values.values())
-
         surplus = grand_coalition_value - total_individual_value
-        equal_share = surplus / n_nodes if n_nodes > 0 else 0
+        equal_share = (
+            surplus / n_nodes
+            if n_nodes > 0
+            else (np.zeros_like(surplus) if per_sample else 0)
+        )
 
         cis_values = {node: individual_values[node] + equal_share for node in nodes}
+
+        # Convert back to float when scalar
+        if not per_sample:
+            cis_values = {node: float(v) for node, v in cis_values.items()}
 
         return cis_values

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shapG"
-version = "0.13.8"
+version = "0.14.1"
 description = "Scalable Shapley Value Computation for Graph Data with Modular Architecture"
 readme = "README.md"
 requires-python = ">=3.8"

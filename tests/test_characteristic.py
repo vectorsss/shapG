@@ -531,5 +531,194 @@ class TestCharacteristicFunctionIntegration(unittest.TestCase):
         np.testing.assert_array_equal(individual_results, batch_results)
 
 
+class TestBatchedModelCharacteristic(unittest.TestCase):
+    """Tests for BatchedModelCharacteristic."""
+
+    def setUp(self):
+        from sklearn.linear_model import LinearRegression
+        from shapG.characteristic import BatchedModelCharacteristic
+
+        self.BatchedModelCharacteristic = BatchedModelCharacteristic
+
+        rng = np.random.default_rng(42)
+        self.n_samples = 30
+        self.n_features = 4
+
+        self.X_2d = rng.standard_normal((self.n_samples, self.n_features))
+        self.y = self.X_2d[:, 0] + 0.5 * self.X_2d[:, 1]
+        self.model_2d = LinearRegression().fit(self.X_2d, self.y)
+
+        # 3-D data: (n_samples, timesteps, n_features)
+        self.timesteps = 5
+        self.X_3d = rng.standard_normal(
+            (self.n_samples, self.timesteps, self.n_features)
+        )
+        # Flatten for a simple model
+        X_flat = self.X_3d.reshape(self.n_samples, -1)
+        self.y_3d = X_flat[:, 0] + 0.5 * X_flat[:, 1]
+        from sklearn.linear_model import LinearRegression as LR
+
+        self.model_3d_flat = LR().fit(X_flat, self.y_3d)
+
+        # Wrap a model that expects flattened 3-D input
+        class FlatteningWrapper:
+            def __init__(self, inner):
+                self.inner = inner
+
+            def predict(self, X):
+                return self.inner.predict(X.reshape(len(X), -1))
+
+        self.model_3d = FlatteningWrapper(self.model_3d_flat)
+
+        self.global_metric = lambda yt, yp: float(np.mean((yt - yp) ** 2))
+
+    def test_2d_batch_matches_individual_calls(self):
+        """batch_compute result matches per-coalition __call__() for 2D data."""
+        char_fn = self.BatchedModelCharacteristic(
+            model=self.model_2d,
+            X=self.X_2d,
+            y=self.y,
+            metric_fn=self.global_metric,
+        )
+
+        coalitions = [set(), {0}, {1, 2}, {0, 1, 2, 3}]
+
+        individual = np.array([char_fn(c) for c in coalitions])
+        batch = char_fn.batch_compute(coalitions)
+
+        self.assertEqual(batch.ndim, 1)
+        self.assertEqual(batch.shape[0], len(coalitions))
+        np.testing.assert_allclose(batch, individual, rtol=1e-10)
+
+    def test_3d_batch_matches_individual_calls(self):
+        """batch_compute result matches per-coalition __call__() for 3D data."""
+        char_fn = self.BatchedModelCharacteristic(
+            model=self.model_3d,
+            X=self.X_3d,
+            y=self.y_3d,
+            metric_fn=self.global_metric,
+        )
+
+        coalitions = [set(), {0}, {1, 3}, {0, 1, 2, 3}]
+
+        individual = np.array([char_fn(c) for c in coalitions])
+        batch = char_fn.batch_compute(coalitions)
+
+        self.assertEqual(batch.ndim, 1)
+        self.assertEqual(batch.shape[0], len(coalitions))
+        np.testing.assert_allclose(batch, individual, rtol=1e-10)
+
+    def test_single_predict_call_2d(self):
+        """batch_compute issues exactly one model.predict() call."""
+        from unittest.mock import MagicMock, patch
+
+        real_model = self.model_2d
+        mock_model = MagicMock(wraps=real_model)
+        mock_model.predict = MagicMock(side_effect=real_model.predict)
+
+        char_fn = self.BatchedModelCharacteristic(
+            model=mock_model,
+            X=self.X_2d,
+            y=self.y,
+            metric_fn=self.global_metric,
+        )
+
+        coalitions = [{0}, {1, 2}, {0, 1, 3}]
+        char_fn.batch_compute(coalitions)
+
+        self.assertEqual(
+            mock_model.predict.call_count,
+            1,
+            "batch_compute must call model.predict exactly once",
+        )
+
+    def test_single_predict_call_3d(self):
+        """batch_compute for 3D data issues exactly one model.predict() call."""
+        from unittest.mock import MagicMock
+
+        inner_predict = self.model_3d.predict
+        mock_model = MagicMock()
+        mock_model.predict = MagicMock(side_effect=inner_predict)
+
+        char_fn = self.BatchedModelCharacteristic(
+            model=mock_model,
+            X=self.X_3d,
+            y=self.y_3d,
+            metric_fn=self.global_metric,
+        )
+
+        char_fn.batch_compute([{0}, {1}, {2, 3}])
+        self.assertEqual(mock_model.predict.call_count, 1)
+
+    def test_per_sample_metric_output_shape(self):
+        """metric_fn returning array produces shape (n_coalitions, n_samples)."""
+        per_sample_metric = lambda yt, yp: (yt - yp) ** 2  # (n_samples,)
+
+        char_fn = self.BatchedModelCharacteristic(
+            model=self.model_2d,
+            X=self.X_2d,
+            y=self.y,
+            metric_fn=per_sample_metric,
+        )
+
+        coalitions = [{0}, {1, 2}, set()]
+        result = char_fn.batch_compute(coalitions)
+
+        self.assertEqual(result.ndim, 2)
+        self.assertEqual(result.shape, (3, self.n_samples))
+
+    def test_invalid_mask_value_shape(self):
+        """Passing mask_value with wrong shape raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.BatchedModelCharacteristic(
+                model=self.model_2d,
+                X=self.X_2d,
+                y=self.y,
+                metric_fn=self.global_metric,
+                mask_value=np.zeros(self.n_features + 1),
+            )
+
+    def test_invalid_X_ndim(self):
+        """Passing 1D X raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.BatchedModelCharacteristic(
+                model=self.model_2d,
+                X=np.zeros(10),
+                y=np.zeros(10),
+                metric_fn=self.global_metric,
+            )
+
+    def test_chunk_size_matches_unchunked(self):
+        """batch_compute with chunk_size produces identical results to a single call."""
+        char_fn = self.BatchedModelCharacteristic(
+            model=self.model_2d,
+            X=self.X_2d,
+            y=self.y,
+            metric_fn=self.global_metric,
+        )
+
+        coalitions = [set(), {0}, {1}, {2}, {0, 1}, {1, 2}, {0, 1, 2}, {0, 1, 2, 3}]
+
+        full = char_fn.batch_compute(coalitions)
+        chunked = char_fn.batch_compute(coalitions, chunk_size=3)
+
+        self.assertEqual(full.shape, chunked.shape)
+        np.testing.assert_allclose(chunked, full, rtol=1e-10)
+
+    def test_chunk_size_larger_than_coalitions(self):
+        """chunk_size >= len(coalitions) falls through to a single _compute_chunk call."""
+        char_fn = self.BatchedModelCharacteristic(
+            model=self.model_2d,
+            X=self.X_2d,
+            y=self.y,
+            metric_fn=self.global_metric,
+        )
+
+        coalitions = [{0}, {1, 2}]
+        full = char_fn.batch_compute(coalitions)
+        chunked = char_fn.batch_compute(coalitions, chunk_size=100)
+        np.testing.assert_allclose(chunked, full, rtol=1e-10)
+
+
 if __name__ == "__main__":
     unittest.main()

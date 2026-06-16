@@ -562,13 +562,13 @@ class TestGraphBuilder(unittest.TestCase):
         self.assertEqual(set(G1.edges()), set(G2.edges()))
 
     def test_get_feature_rank(self):
-        """Test _get_feature_rank helper method."""
+        """Test get_feature_rank helper method."""
         X = np.random.randn(50, 4)
         y = np.random.randn(50)
 
         # Test different ranking methods
         for method in ["cosine", "pearsonr", "mutual_info"]:
-            rank = GraphBuilder._get_feature_rank(X, y, method)
+            rank = GraphBuilder.get_feature_rank(X, y, method)
 
             self.assertIsInstance(rank, list)
             self.assertEqual(len(rank), 4)
@@ -947,6 +947,89 @@ class TestEdgeCasesUtils(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             builder._calculate_similarity_matrix(X, method="invalid_method")
+
+
+class TestGraphBuilderCollaboratorMap(unittest.TestCase):
+    """Tests for GraphBuilder.to_collaborator_map()."""
+
+    def test_basic_graph_self_inclusion(self):
+        """Every node includes itself in its collaborator list."""
+        G = nx.path_graph(4)  # 0-1-2-3
+        result = GraphBuilder.to_collaborator_map(G)
+
+        self.assertEqual(len(result), 4)
+        for idx, collaborators in result.items():
+            self.assertIn(idx, collaborators, f"Node {idx} must include itself")
+
+    def test_basic_graph_neighbor_inclusion(self):
+        """Neighbours of each node are included in its collaborator list."""
+        G = nx.path_graph(4)  # edges: 0-1, 1-2, 2-3
+        result = GraphBuilder.to_collaborator_map(G)
+
+        nodes = list(G.nodes())
+        node_to_idx = {n: i for i, n in enumerate(nodes)}
+
+        for node in G.nodes():
+            idx = node_to_idx[node]
+            expected_neighbours = sorted(node_to_idx[nb] for nb in G.neighbors(node))
+            self.assertEqual(result[idx], [idx] + expected_neighbours)
+
+    def test_string_node_labels(self):
+        """String node labels are converted to 0-based integer indices."""
+        G = nx.Graph()
+        G.add_nodes_from(["a", "b", "c"])
+        G.add_edge("a", "b")
+        G.add_edge("b", "c")
+
+        result = GraphBuilder.to_collaborator_map(G)
+
+        nodes = list(G.nodes())
+        node_to_idx = {n: i for i, n in enumerate(nodes)}
+
+        # Keys should be ints, not strings
+        for key in result:
+            self.assertIsInstance(key, int)
+
+        # Each entry must be self + sorted neighbours
+        for node in G.nodes():
+            idx = node_to_idx[node]
+            expected_neighbours = sorted(node_to_idx[nb] for nb in G.neighbors(node))
+            self.assertEqual(result[idx], [idx] + expected_neighbours)
+
+    def test_isolated_node(self):
+        """An isolated node maps to a singleton list containing only itself."""
+        G = nx.Graph()
+        G.add_nodes_from([0, 1, 2])
+        G.add_edge(0, 1)  # node 2 is isolated
+
+        result = GraphBuilder.to_collaborator_map(G)
+
+        nodes = list(G.nodes())
+        idx_2 = nodes.index(2)
+        self.assertEqual(result[idx_2], [idx_2])
+
+    def test_complete_graph(self):
+        """In a complete graph every node collaborates with all other nodes."""
+        n = 5
+        G = nx.complete_graph(n)
+        result = GraphBuilder.to_collaborator_map(G)
+
+        for idx, collaborators in result.items():
+            self.assertEqual(
+                len(collaborators),
+                n,
+                f"Node {idx} should have {n} collaborators in K_{n}",
+            )
+
+    def test_return_type(self):
+        """Return value is a plain dict with int keys and list values."""
+        G = nx.path_graph(3)
+        result = GraphBuilder.to_collaborator_map(G)
+
+        self.assertIsInstance(result, dict)
+        for k, v in result.items():
+            self.assertIsInstance(k, int)
+            self.assertIsInstance(v, list)
 
 
 if __name__ == "__main__":
