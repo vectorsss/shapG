@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "setuptools-scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "shapG"
-version = "0.14.1"
+dynamic = ["version"]
 description = "Scalable Shapley Value Computation for Graph Data with Modular Architecture"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -92,6 +92,10 @@ include = ["shapG*"]
 
 [tool.setuptools.package-data]
 shapG = ["py.typed"]
+
+# Version is derived from git tags (e.g. `git tag v0.15.0`). No manual edits.
+[tool.setuptools_scm]
+fallback_version = "0.0.0"
 
 [tool.black]
 line-length = 100

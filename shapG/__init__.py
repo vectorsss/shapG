@@ -40,7 +40,15 @@ plot(shapley_values, top_n=10)
 ```
 """
 
-__version__ = "0.13.8"
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
+try:
+    # Version is managed by setuptools-scm (derived from git tags) and exposed
+    # through the installed package metadata.
+    __version__ = _pkg_version("shapG")
+except PackageNotFoundError:  # running from a source tree that isn't installed
+    __version__ = "0.0.0+unknown"
 
 # New modular API imports
 from .explainer import (
