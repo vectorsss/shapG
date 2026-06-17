@@ -2,21 +2,32 @@
 ShapG - Scalable Shapley Value Computation for Graph Data
 =========================================================
 
-ShapG provides efficient algorithms for computing Shapley values 
+ShapG provides efficient algorithms for computing Shapley values
 on graph data structures, with both exact and approximate methods.
 
-Main Components:
----------------
-* shapley - Core Shapley value computation algorithms
-* utils - Supporting functions for data processing and graph operations
-* plot - Visualization tools for Shapley values
-
-Example Usage:
--------------
+New Modular API (Recommended):
+------------------------------
 ```python
-import networkx as nx
-from shapG.shapley import shapG, graph_generator
-from shapG.plot import plot
+from shapG import ShapGExplainer, GraphBuilder
+
+# Build graph from data
+builder = GraphBuilder()
+G = builder.from_correlation(data, threshold=0.3)
+
+# Create explainer and compute Shapley values
+explainer = ShapGExplainer(depth=2, n_samples=20)
+shapley_values = explainer.fit_explain(G)
+
+# Visualize
+from shapG import FeatureImportanceVisualizer
+viz = FeatureImportanceVisualizer()
+viz.plot_importance(shapley_values)
+```
+
+Legacy API (Backward Compatible):
+---------------------------------
+```python
+from shapG import shapG, graph_generator, plot
 
 # Generate a random graph
 G = graph_generator(n_nodes=10, density=0.5)
@@ -29,27 +40,114 @@ plot(shapley_values, top_n=10)
 ```
 """
 
-from .shapley import shapley_value, shapG, coalition_degree, graph_generator, cis
-from .plot import plot
-from .utils import (
-    corr_generator, 
-    matrix_generator, 
-    kl, 
-    kl_mi_matrix, 
-    create_minimal_edge_graph
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
+try:
+    # Version is managed by setuptools-scm (derived from git tags) and exposed
+    # through the installed package metadata.
+    __version__ = _pkg_version("shapG")
+except PackageNotFoundError:  # running from a source tree that isn't installed
+    __version__ = "0.0.0+unknown"
+
+# New modular API imports
+from .explainer import (
+    CharacteristicFunction,
+    Explainer,
+    GraphExplainer,
+    ExactExplainer,
+    ShapGExplainer,
+    CISExplainer,
+    RandomCSExplainer,
+    QRCSExplainer,
+    BlockQRCSExplainer,
+    ImprovedQRCSExplainer,
+    ImprovedBlockQRCSExplainer,
+    LeverageScoreExplainer,
+    MultilinearExplainer,
+    StratifiedShapleyExplainer,
+    MarkovianExplainer,
+    PermutationExplainer,
 )
 
-__version__ = '0.13.3'
+from .characteristic import (
+    CoalitionDegree,
+    NodeCount,
+    WeightedSum,
+    CustomFunction,
+    CenterOfImputationSet,
+    BatchedModelCharacteristic,
+)
+
+from .utils import (
+    GraphBuilder,
+    CoalitionManager,
+    corr_generator,
+    matrix_generator,
+    kl,
+    kl_mi_matrix,
+    create_minimal_edge_graph,
+)
+
+from .visualization import FeatureImportanceVisualizer, plot_shapley_values, plot
+
+# Backward compatibility imports from old API
+from .__legacy import (
+    shapley_value,
+    shapG,
+    coalition_degree,
+    cis,
+    graph_generator,
+    get_reachable_nodes_at_depth,
+)
+
+# All exported symbols
 __all__ = [
-    'shapley_value',
-    'shapG',
-    'cis',
-    'coalition_degree',
-    'graph_generator',
-    'plot',
-    'corr_generator',
-    'matrix_generator',
-    'kl',
-    'kl_mi_matrix',
-    'create_minimal_edge_graph'
+    # Version
+    "__version__",
+    # New API - Base classes
+    "CharacteristicFunction",
+    "Explainer",
+    "GraphExplainer",
+    # New API - Explainers
+    "ExactExplainer",
+    "ShapGExplainer",
+    "CISExplainer",
+    "RandomCSExplainer",
+    "QRCSExplainer",
+    "BlockQRCSExplainer",
+    "ImprovedQRCSExplainer",
+    "ImprovedBlockQRCSExplainer",
+    "LeverageScoreExplainer",
+    "MultilinearExplainer",
+    "StratifiedShapleyExplainer",
+    "MarkovianExplainer",
+    "PermutationExplainer",
+    # New API - Characteristic functions
+    "CoalitionDegree",
+    "NodeCount",
+    "WeightedSum",
+    "CustomFunction",
+    "CenterOfImputationSet",
+    "BatchedModelCharacteristic",
+    # New API - Graph construction
+    "GraphBuilder",
+    "CoalitionManager",
+    # New API - Visualization
+    "FeatureImportanceVisualizer",
+    "plot_shapley_values",
+    # Old API - Backward compatibility
+    "shapley_value",
+    "shapG",
+    "cis",
+    "coalition_degree",
+    "graph_generator",
+    "get_reachable_nodes_at_depth",
+    "plot",
+    # Utils
+    "corr_generator",
+    "matrix_generator",
+    "kl",
+    "kl_mi_matrix",
+    "create_minimal_edge_graph",
 ]

@@ -13,21 +13,23 @@ pip install shapG
 - Visualization tools for Shapley values
 - Utility functions for graph generation and analysis
 
-## Quick Start
+## Quick Start (New Modular API)
 
 ```python
 import networkx as nx
-from shapG.shapley import shapG, graph_generator
-from shapG.plot import plot
+from shapG import ShapGExplainer, GraphBuilder, FeatureImportanceVisualizer
 
-# Generate a random graph
-G = graph_generator(n_nodes=10, density=0.5)
+# Build a graph from tabular data
+builder = GraphBuilder()
+G = builder.from_correlation(data, threshold=0.3)
 
 # Compute approximate Shapley values
-shapley_values = shapG(G, depth=1, m=15)
+explainer = ShapGExplainer(depth=1, n_samples=15)
+shapley_values = explainer.fit_explain(G)
 
 # Visualize the results
-plot(shapley_values, top_n=10)
+viz = FeatureImportanceVisualizer()
+viz.plot_importance(shapley_values)
 ```
 
 ## Advanced Usage
@@ -37,21 +39,24 @@ plot(shapley_values, top_n=10)
 You can define a custom characteristic function:
 
 ```python
-def my_coalition_function(G, S):
-    # Your custom characteristic function
-    subgraph = G.subgraph(S)
-    return nx.density(subgraph) * len(S)
+from shapG import ShapGExplainer, CustomFunction
 
-# Use your custom function
-shapley_values = shapG(G, f=my_coalition_function)
+def my_coalition_function(coalition, graph):
+    subgraph = graph.subgraph(coalition)
+    return nx.density(subgraph) * len(coalition)
+
+custom_func = CustomFunction(my_coalition_function)
+explainer = ShapGExplainer(characteristic_function=custom_func)
+shapley_values = explainer.fit_explain(G)
 ```
-
-More example, see `./examples`.
 
 ### Customizing the Plot
 
 ```python
-fig, ax = plot(
+from shapG import FeatureImportanceVisualizer
+
+viz = FeatureImportanceVisualizer()
+fig, ax = viz.plot_importance(
     shapley_values,
     top_n=5,                    # Show only top 5 values
     style='seaborn-v0_8',       # Matplotlib style
@@ -61,13 +66,24 @@ fig, ax = plot(
     color="#2E86C1",            # Bar color
     show_values=True,           # Show values next to bars
     value_format="{:.4f}",      # Format for displayed values
-    show_plot: bool = False      # Show plot
+    show_plot=False             # Show plot
 )
 
 # Further customize the plot using matplotlib objects
 ax.set_xlabel("Contribution Score", fontsize=14)
-plt.show()
 ```
+
+## Legacy API (Deprecated)
+
+The legacy procedural APIs (`shapG`, `shapley_value`, `graph_generator`, `plot`) are
+deprecated and planned for removal in v0.15.0. Please migrate to the modular API
+(`ShapGExplainer`, `ExactExplainer`, `GraphBuilder`, `FeatureImportanceVisualizer`).
+
+## Performance Notes
+
+Exact Shapley computation scales as O(2^n). For graphs with more than ~20 nodes,
+prefer approximate explainers such as `ShapGExplainer`, `QRCSExplainer`, or
+`BlockQRCSExplainer`.
 
 ## License
 
@@ -80,14 +96,14 @@ If you find this code useful in your research, please consider citing:
 1. For centralities measures:
       ```
       @article{zhao2024centralitymeasuresopiniondynamics,
-            title={Centrality measures and opinion dynamics in two-layer networks with replica nodes}, 
+            title={Centrality measures and opinion dynamics in two-layer networks with replica nodes},
             author={Chi Zhao and Elena Parilina},
             year={2024},
             eprint={2406.18780},
             archivePrefix={arXiv},
             primaryClass={physics.soc-ph},
             journal={arXiv preprint arXiv:2406.18780},
-            url={https://arxiv.org/abs/2406.18780}, 
+            url={https://arxiv.org/abs/2406.18780},
       }
       ```
 2. For the new method for explanable ai:

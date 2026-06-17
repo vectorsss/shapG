@@ -176,5 +176,20 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 
+# Test outputs
+test_outputs/
 
+# Build artifacts
+*.pkl
+*.png
+*.eps
+*.pdf
 
+# Visualization outputs
+visualizations/
+
+# MPL cache
+.mpl/
+
+# Example output
+examples/quickstart_importance.png
