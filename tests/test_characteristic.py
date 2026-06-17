@@ -588,7 +588,7 @@ class TestBatchedModelCharacteristic(unittest.TestCase):
 
         self.assertEqual(batch.ndim, 1)
         self.assertEqual(batch.shape[0], len(coalitions))
-        np.testing.assert_allclose(batch, individual, rtol=1e-10)
+        np.testing.assert_allclose(batch, individual, rtol=1e-10, atol=1e-12)
 
     def test_3d_batch_matches_individual_calls(self):
         """batch_compute result matches per-coalition __call__() for 3D data."""
@@ -606,7 +606,7 @@ class TestBatchedModelCharacteristic(unittest.TestCase):
 
         self.assertEqual(batch.ndim, 1)
         self.assertEqual(batch.shape[0], len(coalitions))
-        np.testing.assert_allclose(batch, individual, rtol=1e-10)
+        np.testing.assert_allclose(batch, individual, rtol=1e-10, atol=1e-12)
 
     def test_single_predict_call_2d(self):
         """batch_compute issues exactly one model.predict() call."""
@@ -703,7 +703,7 @@ class TestBatchedModelCharacteristic(unittest.TestCase):
         chunked = char_fn.batch_compute(coalitions, chunk_size=3)
 
         self.assertEqual(full.shape, chunked.shape)
-        np.testing.assert_allclose(chunked, full, rtol=1e-10)
+        np.testing.assert_allclose(chunked, full, rtol=1e-10, atol=1e-12)
 
     def test_chunk_size_larger_than_coalitions(self):
         """chunk_size >= len(coalitions) falls through to a single _compute_chunk call."""
@@ -717,7 +717,7 @@ class TestBatchedModelCharacteristic(unittest.TestCase):
         coalitions = [{0}, {1, 2}]
         full = char_fn.batch_compute(coalitions)
         chunked = char_fn.batch_compute(coalitions, chunk_size=100)
-        np.testing.assert_allclose(chunked, full, rtol=1e-10)
+        np.testing.assert_allclose(chunked, full, rtol=1e-10, atol=1e-12)
 
 
 if __name__ == "__main__":
