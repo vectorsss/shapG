@@ -50,8 +50,6 @@ explainer = ShapGExplainer(characteristic_function=custom_func)
 shapley_values = explainer.fit_explain(G)
 ```
 
-More example, see `./examples`.
-
 ### Customizing the Plot
 
 ```python
