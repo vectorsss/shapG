@@ -15,6 +15,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+        # Full history + tags so setuptools-scm can derive the version.
+        fetch-depth: 0
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
@@ -24,8 +27,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install flake8 pytest build wheel setuptools twine
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        python -m pip install build twine
+        # Install the package with its runtime + dev (pytest, flake8) deps.
+        python -m pip install ".[dev]"
 
     - name: Lint with flake8
       run: |
