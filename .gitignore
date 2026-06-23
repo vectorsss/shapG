@@ -193,3 +193,7 @@ visualizations/
 
 # Example output
 examples/quickstart_importance.png
+
+# Experiments harness: generated run outputs (keep the dir, drop the contents)
+experiments/results/*
+!experiments/results/.gitkeep

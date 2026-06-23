@@ -1,0 +1,204 @@
+# Estimator comparison on housing (RETRAIN mode): v(S) retrains a fresh
+# model on the coalition's features instead of masking. Slower but does not
+# rely on an imputation baseline. Exact is dropped (8192 retrains impractical).
+dataset: housing
+model:
+  type: LGBMRegressor
+  params:
+    n_estimators: 100
+    learning_rate: 0.3
+    random_state: 42
+    verbosity: -1
+  train_test_split:
+    test_size: 0.2
+    random_state: 42
+graphs:
+  # ShapG is graph_dependent, so each graph yields a separate ShapG variant
+  # (the old benchmark_qr_new_api.py "--no-improved-graphs" comparison):
+  # shapg | kendalltau, shapg | rank_deletion_{cosine,kendalltau,mutual_info}.
+  kendalltau:
+    method: from_kendalltau_minimal_edge
+    params:
+      reverse: true
+      version: v3
+  rank_deletion_cosine:
+    method: from_rank_deletion
+    params:
+      density_ratio: null
+      correlation_method: cosine
+      similarity_method: cosine
+  rank_deletion_kendalltau:
+    method: from_rank_deletion
+    params:
+      density_ratio: null
+      correlation_method: kendalltau
+      similarity_method: kendalltau
+  rank_deletion_mutual_info:
+    method: from_rank_deletion
+    params:
+      density_ratio: null
+      correlation_method: mutual_info
+      similarity_method: mutual_info
+explainers:
+  shapg:
+    class: ShapGExplainer
+    params:
+      depth: 1
+      n_samples: 3
+      approximate_by_ratio: false
+      scale: false
+  cis:
+    class: CISExplainer
+    graph_dependent: false
+    params: {}
+  randomcs:
+    class: RandomCSExplainer
+    graph_dependent: false
+    params:
+      m: 50
+      t: 30
+      seed: 42
+  qrcs:
+    class: QRCSExplainer
+    graph_dependent: false
+    params:
+      n_measurements: 100        # benchmark: min(100, 2^(n-1)//4) = 100 for housing
+  block_qrcs:
+    class: BlockQRCSExplainer
+    graph_dependent: false
+    params:
+      n_blocks: 2                # benchmark: min(3, max(2, n//5)) = 2 for housing
+      parallel: false            # benchmark passes parallel=False (avoids nested-thread oversubscription)
+      use_fast_fallback: false   # benchmark passes use_fast_fallback=False
+  improved_qrcs:
+    class: ImprovedQRCSExplainer
+    graph_dependent: false
+    params:
+      n_measurements: 100        # benchmark passes n_measurements=100
+      sparsity_threshold: 0.8
+      auto_adapt: true
+  improved_block_qrcs:
+    class: ImprovedBlockQRCSExplainer
+    graph_dependent: false
+    params:
+      n_blocks: 2                # benchmark: 2 for housing
+      parallel: true             # benchmark passes parallel=True for this one
+      sparsity_threshold: 0.8
+      auto_adapt: true
+  stratified_sw_direct:
+    class: StratifiedShapleyExplainer
+    graph_dependent: false
+    params:
+      n_samples: 50
+      allocation_strategy: shapley_weighted
+      use_direct_estimation: true
+      seed: 42
+  stratified_sw_cs:
+    class: StratifiedShapleyExplainer
+    graph_dependent: false
+    params:
+      n_samples: 50
+      allocation_strategy: shapley_weighted
+      use_direct_estimation: false
+      seed: 42
+  stratified_lev_direct:
+    class: StratifiedShapleyExplainer
+    graph_dependent: false
+    params:
+      n_samples: 50
+      allocation_strategy: leverage
+      use_direct_estimation: true
+      seed: 42
+  stratified_lev_cs:
+    class: StratifiedShapleyExplainer
+    graph_dependent: false
+    params:
+      n_samples: 50
+      allocation_strategy: leverage
+      use_direct_estimation: false
+      seed: 42
+  stratified_levb_direct:
+    class: StratifiedShapleyExplainer
+    graph_dependent: false
+    params:
+      n_samples: 50
+      allocation_strategy: leverage_bernoulli
+      use_direct_estimation: true
+      seed: 42
+  stratified_levb_cs:
+    class: StratifiedShapleyExplainer
+    graph_dependent: false
+    params:
+      n_samples: 50
+      allocation_strategy: leverage_bernoulli
+      use_direct_estimation: false
+      seed: 42
+  leverage:
+    class: LeverageScoreExplainer
+    graph_dependent: false
+    params:
+      n_samples: 500
+      paired_sampling: true
+      use_bernoulli: true
+      random_state: 42
+  multilinear_naive:
+    class: MultilinearExplainer
+    graph_dependent: false
+    params:
+      n_quadrature: 11
+      n_samples: 100
+      use_leverage: false
+      seed: 42
+  multilinear_sw:
+    class: MultilinearExplainer
+    graph_dependent: false
+    params:
+      n_quadrature: 11
+      n_samples: 100
+      use_leverage: true
+      sampling_method: stratified   # = MultilinearExplainer default (benchmark doesn't set it)
+      leverage_type: shapley_weighted
+      compute_error_bounds: true    # benchmark MULTILINEAR_CONFIG sets this True
+      confidence: 0.95
+      seed: 42
+  multilinear_ic:
+    class: MultilinearExplainer
+    graph_dependent: false
+    params:
+      n_quadrature: 11
+      n_samples: 100
+      use_leverage: true
+      sampling_method: stratified
+      leverage_type: inverse_coalition
+      compute_error_bounds: true
+      confidence: 0.95
+      seed: 42
+  multilinear_bernoulli:
+    class: MultilinearExplainer
+    graph_dependent: false
+    params:
+      n_quadrature: null            # benchmark MULTILINEAR_BERNOULLI_CONFIG: None (auto)
+      n_samples: null               # benchmark: None (auto), not 100
+      use_leverage: true
+      sampling_method: bernoulli
+      leverage_type: inverse_coalition
+      compute_error_bounds: true
+      confidence: 0.95
+      seed: 42
+characteristic_function:
+  type: model_based
+  params:
+    no_retrain: false
+    imputation_strategy: mean
+evaluation:
+  enabled: true
+  limit: 10
+  retrain_kpi: true
+  imputation_strategy: mean
+  weighted_slope_beta: 0.8
+seed: 42
+plot:
+  figsize:
+  - 12
+  - 8
+  dpi: 300
